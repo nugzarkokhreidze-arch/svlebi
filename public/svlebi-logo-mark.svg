@@ -1,0 +1,107 @@
+<svg width="900" height="900" viewBox="0 0 900 900" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="70%" stop-color="#f5f1e9"/>
+      <stop offset="100%" stop-color="#eee7da"/>
+    </radialGradient>
+
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#102033" flood-opacity="0.18"/>
+    </filter>
+
+    <filter id="soft" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="9" flood-color="#102033" flood-opacity="0.16"/>
+    </filter>
+
+    <style>
+      .outer { fill:#f2dfba; stroke:#fff5d8; stroke-width:5; }
+      .face-red { fill:url(#redGrad); }
+      .face-green { fill:url(#greenGrad); }
+      .face-black { fill:url(#blackGrad); }
+      .face-yellow { fill:url(#yellowGrad); }
+      .symbol { fill:#fffaf0; font-family:Arial, sans-serif; font-size:56px; font-weight:900; text-anchor:middle; dominant-baseline:middle; }
+      .pip { fill:#111827; }
+      .line { stroke:#ddc99d; stroke-width:4; stroke-linecap:round; }
+    </style>
+
+    <linearGradient id="redGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#dc4a3e"/>
+      <stop offset="100%" stop-color="#a91f1a"/>
+    </linearGradient>
+
+    <linearGradient id="greenGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#25a874"/>
+      <stop offset="100%" stop-color="#0d6f4b"/>
+    </linearGradient>
+
+    <linearGradient id="blackGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#243049"/>
+      <stop offset="100%" stop-color="#0c1322"/>
+    </linearGradient>
+
+    <linearGradient id="yellowGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#efbd35"/>
+      <stop offset="100%" stop-color="#c78d06"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="900" rx="0" fill="url(#bg)"/>
+
+  <g transform="translate(450 450)" filter="url(#shadow)">
+    <g transform="rotate(-58) translate(-40 -255)" filter="url(#soft)">
+      <rect class="outer" x="-65" y="-110" width="130" height="220" rx="28"/>
+      <rect class="face-green" x="-48" y="-92" width="96" height="92" rx="18"/>
+      <line class="line" x1="-38" y1="16" x2="38" y2="16"/>
+      <text class="symbol" x="0" y="-45">♛</text>
+      <circle class="pip" cx="-23" cy="48" r="9"/>
+      <circle class="pip" cx="23" cy="48" r="9"/>
+    </g>
+
+    <g transform="rotate(-18) translate(-20 -255)" filter="url(#soft)">
+      <rect class="outer" x="-65" y="-110" width="130" height="220" rx="28"/>
+      <rect class="face-red" x="-48" y="-92" width="96" height="92" rx="18"/>
+      <line class="line" x1="-38" y1="16" x2="38" y2="16"/>
+      <text class="symbol" x="0" y="-45">+</text>
+      <circle class="pip" cx="0" cy="48" r="9"/>
+    </g>
+
+    <g transform="rotate(25) translate(22 -248)" filter="url(#soft)">
+      <rect class="outer" x="-65" y="-110" width="130" height="220" rx="28"/>
+      <rect class="face-black" x="-48" y="-92" width="96" height="92" rx="18"/>
+      <line class="line" x1="-38" y1="16" x2="38" y2="16"/>
+      <text class="symbol" x="0" y="-45">$</text>
+      <circle class="pip" cx="-24" cy="44" r="8"/>
+      <circle class="pip" cx="24" cy="44" r="8"/>
+      <circle class="pip" cx="0" cy="72" r="8"/>
+    </g>
+
+    <g transform="rotate(67) translate(38 -245)" filter="url(#soft)">
+      <rect class="outer" x="-65" y="-110" width="130" height="220" rx="28"/>
+      <rect class="face-yellow" x="-48" y="-92" width="96" height="92" rx="18"/>
+      <line class="line" x1="-38" y1="16" x2="38" y2="16"/>
+      <text class="symbol" x="0" y="-45">⚑</text>
+      <circle class="pip" cx="-24" cy="42" r="8"/>
+      <circle class="pip" cx="24" cy="42" r="8"/>
+    </g>
+
+    <g transform="rotate(138) translate(28 -255)" filter="url(#soft)">
+      <rect class="outer" x="-65" y="-110" width="130" height="220" rx="28"/>
+      <rect class="face-green" x="-48" y="-92" width="96" height="92" rx="18"/>
+      <line class="line" x1="-38" y1="16" x2="38" y2="16"/>
+      <text class="symbol" x="0" y="-45">↻</text>
+      <circle class="pip" cx="0" cy="52" r="9"/>
+    </g>
+
+    <g transform="rotate(206) translate(12 -250)" filter="url(#soft)">
+      <rect class="outer" x="-65" y="-110" width="130" height="220" rx="28"/>
+      <rect class="face-black" x="-48" y="-92" width="96" height="92" rx="18"/>
+      <line class="line" x1="-38" y1="16" x2="38" y2="16"/>
+      <text class="symbol" x="0" y="-45">!</text>
+      <circle class="pip" cx="-25" cy="42" r="8"/>
+      <circle class="pip" cx="25" cy="42" r="8"/>
+      <circle class="pip" cx="-25" cy="72" r="8"/>
+      <circle class="pip" cx="25" cy="72" r="8"/>
+    </g>
+  </g>
+</svg>

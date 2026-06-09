@@ -323,6 +323,57 @@ function getAvatarLook(player: Player): AvatarLook {
   return AVATAR_LOOKS.human;
 }
 
+function getAiBehaviorProfile(aiId: string): string {
+  const index = parseInt(aiId.split("-")[1] || "1");
+  const profiles = ["diplomat", "aggressive", "resource", "opportunist", "leader"];
+  return profiles[index - 1] || "leader";
+}
+
+function getAiPreferredTileColor(aiId: string): TileColor | null {
+  const behavior = getAiBehaviorProfile(aiId);
+  if (behavior === "diplomat") return "red";
+  if (behavior === "aggressive") return "black";
+  if (behavior === "resource") return "yellow";
+  return null;
+}
+
+function getAiPreferredTileSymbols(aiId: string): string[] {
+  const behavior = getAiBehaviorProfile(aiId);
+  if (behavior === "leader") return ["L", "+", "∞"];
+  return [];
+}
+
+function getNavigatorTextForHandTile(tile: GameTile): string {
+  let moveInfo = tile.description;
+
+  // Add information about what kind of moves this tile can be used for
+  if (tile.baseId === "start-green") {
+    moveInfo += " (პირველი სვლის კენჭი)";
+  } else if (tile.color === "red") {
+    moveInfo += " (წითელი: სამშვიდობო / შეთანხმება)";
+  } else if (tile.color === "black") {
+    moveInfo += " (შავი: ზეწოლა / დაპირისპირება)";
+  } else if (tile.color === "yellow") {
+    moveInfo += " (ყვითალი: რესურსი / თანხა)";
+  }
+
+  return moveInfo;
+}
+
+function getNavigatorTextForBoardTile(tile: PlayedTile): string {
+  let boardInfo = `${tile.name}: ${tile.description}`;
+  
+  if (tile.playedBy && tile.playedById !== "system") {
+    boardInfo += ` — დადო: ${tile.playedBy}`;
+  }
+  
+  if (tile.targetName) {
+    boardInfo += ` → ${tile.targetName}`;
+  }
+  
+  return boardInfo;
+}
+
 export default function RoomPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -366,6 +417,8 @@ export default function RoomPage() {
   const [currentTurnId, setCurrentTurnId] = useState("human");
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [moveSpotlight, setMoveSpotlight] = useState<MoveSpotlight | null>(null);
+  const [lastPlacedTileId, setLastPlacedTileId] = useState<string | null>(null);
+  const [lastMoveTimestamp, setLastMoveTimestamp] = useState<number>(0);
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     { id: "chat-1", author: "ნინო AI", text: "ჩატი მზადაა.", type: "ai", mode: "public" },
@@ -444,7 +497,14 @@ export default function RoomPage() {
   function validateMove(tile: GameTile | undefined, anchor: PlayedTile) {
     if (!tile) return "ჯერ უნდა აირჩიო კენჭი.";
     if (winner) return "თამაში უკვე დასრულებულია.";
+    if (currentTurnId !== "human") {
+      return "ეს არ არის თქვენი ჯერი. დაელოდე AI მოთამაშეების სვლას.";
+    }
     if (isAiThinking) return "დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.";
+    if (!anchor) return "აირჩიეთ ადგილი დაფაზე რომელზეც კენჭი დაიდება.";
+    if (board.length === 1 && tile.baseId !== "start-green") {
+      return 'პირველი სვლა მხოლოდ "სვლა" კენჭით შეიძლება.';
+    }
 
     if (isFunctionalColor(tile.color) && tile.color === anchor.color) {
       return `ეს სვლა ვერ განხორციელდება: ${
@@ -465,7 +525,35 @@ export default function RoomPage() {
 
   function pickAiTileFromHands(hands: Record<string, GameTile[]>, aiId: string, anchorColor: TileColor) {
     const aiHand = hands[aiId] || [];
-    return aiHand.find((tile) => !isFunctionalColor(tile.color) || tile.color !== anchorColor) || aiHand[0];
+    if (aiHand.length === 0) return undefined;
+
+    const preferredColor = getAiPreferredTileColor(aiId);
+    const preferredSymbols = getAiPreferredTileSymbols(aiId);
+
+    // Try to find preferred tile based on behavior profile
+    if (preferredColor) {
+      const preferredTile = aiHand.find(
+        (tile) => tile.color === preferredColor && (!isFunctionalColor(tile.color) || tile.color !== anchorColor)
+      );
+      if (preferredTile) return preferredTile;
+    }
+
+    // Try to find preferred symbols (for leader profile)
+    if (preferredSymbols.length > 0) {
+      const preferredTile = aiHand.find(
+        (tile) =>
+          preferredSymbols.includes(tile.symbol) &&
+          (!isFunctionalColor(tile.color) || tile.color !== anchorColor)
+      );
+      if (preferredTile) return preferredTile;
+    }
+
+    // Try to find any valid tile (not conflicting with anchor color)
+    const validTile = aiHand.find((tile) => !isFunctionalColor(tile.color) || tile.color !== anchorColor);
+    if (validTile) return validTile;
+
+    // Fallback to first available tile
+    return aiHand[0];
   }
 
   function buildAiPlayedTile(
@@ -555,6 +643,8 @@ export default function RoomPage() {
     setSelectedTileId(remainingHand[0]?.id || "");
     setSelectedAnchorId(humanPlayedTile.id);
     setBoard(boardAfterHuman);
+    setLastPlacedTileId(humanPlayedTile.id);
+    setLastMoveTimestamp(Date.now());
     setDraggedTileId(null);
     setNavigatorText(`${tileToPlay!.name}: ${tileToPlay!.description}`);
     setSpotlight("human", targetName, tileToPlay!.name, "ვაკეთებ ჩემს სვლას.");
@@ -595,6 +685,8 @@ export default function RoomPage() {
         boardAfterResponse = [...boardAfterHuman, aiReply];
 
         setBoard(boardAfterResponse);
+        setLastPlacedTileId(aiReply.id);
+        setLastMoveTimestamp(Date.now());
         setSelectedAnchorId(aiReply.id);
         setAiHands((previous) => ({
           ...previous,
@@ -651,6 +743,8 @@ export default function RoomPage() {
         );
 
         setBoard((previous) => [...previous, independentMove]);
+        setLastPlacedTileId(independentMove.id);
+        setLastMoveTimestamp(Date.now());
         setSelectedAnchorId(independentMove.id);
         setAiHands((previous) => ({
           ...previous,
@@ -677,7 +771,12 @@ export default function RoomPage() {
   }
 
   function drawFromMarket() {
-    if (marketDeck.length <= 0 || winner) return;
+    if (winner) return;
+
+    if (marketDeck.length <= 0) {
+      setNavigatorText("ბაზარი ცარიელია. აღარ შეიძლება კენჭის აღება.");
+      return;
+    }
 
     if (isAiThinking) {
       setNavigatorText("დაელოდე AI მოთამაშეების სვლას. ბაზრიდან აღება შემდეგ შეგიძლია.");
@@ -849,14 +948,16 @@ export default function RoomPage() {
                 <div
                   className={`boardDominoNode ${
                     tile.orientation === "horizontal" ? "placedHorizontal" : "placedVertical"
-                  } ${selectedAnchorId === tile.id ? "selectedBoardAnchor" : ""}`}
+                  } ${selectedAnchorId === tile.id ? "selectedBoardAnchor" : ""} ${
+                    lastPlacedTileId === tile.id ? "lastPlacedTile" : ""
+                  }`}
                   key={tile.id}
                   style={{ left: `${tile.x}%`, top: `${tile.y}%` }}
                   onClick={() => {
                     setSelectedAnchorId(tile.id);
-                    setNavigatorText(`${tile.name}: ${tile.description}`);
+                    setNavigatorText(getNavigatorTextForBoardTile(tile));
                   }}
-                  onMouseEnter={() => setNavigatorText(`${tile.name}: ${tile.description}`)}
+                  onMouseEnter={() => setNavigatorText(getNavigatorTextForBoardTile(tile))}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
                     event.preventDefault();
@@ -946,10 +1047,10 @@ export default function RoomPage() {
                       setDraggedTileId(tile.id);
                       event.dataTransfer.setData("text/plain", tile.id);
                     }}
-                    onMouseEnter={() => setNavigatorText(`${tile.name}: ${tile.description}`)}
+                    onMouseEnter={() => setNavigatorText(getNavigatorTextForHandTile(tile))}
                     onClick={() => {
                       setSelectedTileId(tile.id);
-                      setNavigatorText(`${tile.name}: ${tile.description}`);
+                      setNavigatorText(getNavigatorTextForHandTile(tile));
                     }}
                     title={tile.description}
                     type="button"

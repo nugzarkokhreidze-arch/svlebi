@@ -694,20 +694,6 @@ export default function RoomPage() {
   const [showAssessmentModal, setShowAssessmentModal] = useState(false);
   const [turnCounter, setTurnCounter] = useState(0);
 
-  // Drag/drop state
-  const [dragState, setDragState] = useState<{
-    tileId: string;
-    tile: GameTile;
-    startX: number;
-    startY: number;
-    currentX: number;
-    currentY: number;
-    isDragging: boolean;
-  } | null>(null);
-  const [dragCanvasRect, setDragCanvasRect] = useState<DOMRect | null>(null);
-  const [dragNearestAnchor, setDragNearestAnchor] = useState<PlayedTile | null>(null);
-  const [dragCalculatedSide, setDragCalculatedSide] = useState<AttachSide | null>(null);
-
   const players: Player[] = useMemo(
     () => [
       {
@@ -882,51 +868,7 @@ export default function RoomPage() {
     });
   }
 
-  // Helper: Find nearest board tile to a screen position
-  function findNearestBoardTileAtPosition(screenX: number, screenY: number): PlayedTile | null {
-    if (!dragCanvasRect) return null;
-
-    const canvasRelX = screenX - dragCanvasRect.left;
-    const canvasRelY = screenY - dragCanvasRect.top;
-    const percentX = (canvasRelX / dragCanvasRect.width) * 100;
-    const percentY = (canvasRelY / dragCanvasRect.height) * 100;
-
-    let nearest: PlayedTile | null = null;
-    let minDistance = 20; // within 20% of canvas
-
-    board.forEach((tile) => {
-      const dist = Math.sqrt(Math.pow(tile.x - percentX, 2) + Math.pow(tile.y - percentY, 2));
-      if (dist < minDistance) {
-        minDistance = dist;
-        nearest = tile;
-      }
-    });
-
-    return nearest;
-  }
-
-  // Helper: Calculate which side to attach based on cursor position relative to anchor
-  function calculateAttachSide(anchor: PlayedTile, screenX: number, screenY: number): AttachSide {
-    if (!dragCanvasRect) return "bottom";
-
-    const canvasRelX = screenX - dragCanvasRect.left;
-    const canvasRelY = screenY - dragCanvasRect.top;
-    const percentX = (canvasRelX / dragCanvasRect.width) * 100;
-    const percentY = (canvasRelY / dragCanvasRect.height) * 100;
-
-    const dx = percentX - anchor.x;
-    const dy = percentY - anchor.y;
-    const absDx = Math.abs(dx);
-    const absDy = Math.abs(dy);
-
-    if (absDx > absDy) {
-      return dx > 0 ? "right" : "left";
-    } else {
-      return dy > 0 ? "bottom" : "top";
-    }
-  }
-
-  function playTileOnAnchor(anchor: PlayedTile, forcedTileId?: string, dragCalculatedSide?: AttachSide) {
+  function playTileOnAnchor(anchor: PlayedTile, forcedTileId?: string) {
     const tileToPlay = hand.find((tile) => tile.id === (forcedTileId || selectedTileId));
     const validationError = validateMove(tileToPlay, anchor);
 
@@ -939,9 +881,7 @@ export default function RoomPage() {
     const targetId = chooseTarget(anchor);
     const targetName = getPlayerName(targetId);
 
-    // Use drag-calculated side if provided, otherwise use manual selection
-    const sideToUse = dragCalculatedSide || selectedSide;
-    const rawPos = getPositionBySide(anchor, sideToUse, board.length);
+    const rawPos = getPositionBySide(anchor, selectedSide, board.length);
     const safePos = findSafePosition(rawPos.x, rawPos.y, board);
 
     const humanPlayedTile: PlayedTile = {
@@ -1318,7 +1258,7 @@ export default function RoomPage() {
                     tile.orientation === "horizontal" ? "placedHorizontal" : "placedVertical"
                   } ${selectedAnchorId === tile.id ? "selectedBoardAnchor" : ""} ${
                     lastPlacedTileId === tile.id ? "lastPlacedTile" : ""
-                  } ${dragNearestAnchor?.id === tile.id ? "dragOverAnchorTile" : ""}`}
+                  }`}
                   key={tile.id}
                   style={{ left: `${tile.x}%`, top: `${tile.y}%` }}
                   onClick={() => {
@@ -1326,6 +1266,12 @@ export default function RoomPage() {
                     setNavigatorText(getNavigatorTextForBoardTile(tile));
                   }}
                   onMouseEnter={() => setNavigatorText(getNavigatorTextForBoardTile(tile))}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    const tileId = draggedTileId || event.dataTransfer.getData("text/plain");
+                    playTileOnAnchor(tile, tileId);
+                  }}
                 >
                   <div
                     className={`${tileClass(tile.color)} boardPlacedSameTile boardTileSameAsHand ${
@@ -1396,141 +1342,21 @@ export default function RoomPage() {
               <div className="bottomVerticalHandTiles compactBottomTiles">
                 {hand.map((tile) => (
                   <button
-                    className={`${tileClass(tile.color)} ${selectedTileId === tile.id ? "selectedRoomTile" : ""} ${dragState?.tileId === tile.id ? "draggingHandTile" : ""}`}
+                    className={`${tileClass(tile.color)} ${selectedTileId === tile.id ? "selectedRoomTile" : ""}`}
                     key={tile.id}
-                    onPointerDown={(event) => {
-                      if (winner || isAiThinking || currentTurnId !== "human") return;
-                      event.preventDefault();
-
-                      const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-                      const canvasElement = document.querySelector(".verticalDominoCanvas");
-                      const canvasRect = canvasElement?.getBoundingClientRect();
-
-                      setDragState({
-                        tileId: tile.id,
-                        tile,
-                        startX: event.clientX,
-                        startY: event.clientY,
-                        currentX: event.clientX,
-                        currentY: event.clientY,
-                        isDragging: false, // Will be set to true on first move
-                      });
-
-                      if (canvasRect) {
-                        setDragCanvasRect(canvasRect);
-                      }
-
-                      setSelectedTileId(tile.id);
-                      setNavigatorText(getNavigatorTextForHandTile(tile));
-                      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
-                    }}
-                    onPointerMove={(event) => {
-                      if (!dragState || dragState.tileId !== tile.id) return;
-
-                      const moveDistance = Math.sqrt(
-                        Math.pow(event.clientX - dragState.startX, 2) +
-                          Math.pow(event.clientY - dragState.startY, 2)
-                      );
-
-                      if (moveDistance > 8) {
-                        // Mark as actually dragging after 8px movement
-                        setDragState((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                isDragging: true,
-                                currentX: event.clientX,
-                                currentY: event.clientY,
-                              }
-                            : null
-                        );
-
-                        // Find nearest anchor and calculate side
-                        const nearest = findNearestBoardTileAtPosition(event.clientX, event.clientY);
-                        if (nearest) {
-                          const side = calculateAttachSide(nearest, event.clientX, event.clientY);
-                          setDragNearestAnchor(nearest);
-                          setDragCalculatedSide(side);
-                        } else {
-                          setDragNearestAnchor(null);
-                          setDragCalculatedSide(null);
-                        }
-
-                        // Prevent page scroll while dragging
-                        document.body.style.overflow = "hidden";
-                      } else {
-                        // Still within click threshold, update position only
-                        setDragState((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                currentX: event.clientX,
-                                currentY: event.clientY,
-                              }
-                            : null
-                        );
-                      }
-                    }}
-                    onPointerUp={(event) => {
-                      if (!dragState || dragState.tileId !== tile.id) return;
-
-                      document.body.style.overflow = "auto";
-                      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
-
-                      if (dragState.isDragging && dragNearestAnchor && dragCalculatedSide) {
-                        // Validate special first move rule
-                        const tileToPlay = hand.find((t) => t.id === tile.id);
-
-                        if (board.length === 1 && dragNearestAnchor.moveType === "start") {
-                          // First move - must be "სვლა"
-                          if (tileToPlay?.baseId !== "start-green") {
-                            setNavigatorText("პირველი სვლა მხოლოდ \'სვლა\' კენჭით შეიძლება.");
-                            setDragState(null);
-                            setDragNearestAnchor(null);
-                            setDragCalculatedSide(null);
-                            return;
-                          }
-                        }
-
-                        // Check if anchor is the start tile and it's occupied on that side
-                        if (dragNearestAnchor.moveType === "start") {
-                          const existingOnSide = board.some(
-                            (t) =>
-                              t.parentId === dragNearestAnchor.id &&
-                              t.id !== dragState.tileId &&
-                              t.orientation === (dragCalculatedSide === "left" || dragCalculatedSide === "right" ? "horizontal" : "vertical")
-                          );
-
-                          if (existingOnSide) {
-                            setNavigatorText("ეს ადგილი დაკავებულია. აირჩიეთ სხვა მხარე.");
-                            setDragState(null);
-                            setDragNearestAnchor(null);
-                            setDragCalculatedSide(null);
-                            return;
-                          }
-                        }
-
-                        // Attempt to place the tile with drag-calculated side
-                        playTileOnAnchor(dragNearestAnchor, tile.id, dragCalculatedSide);
-                      } else if (dragState.isDragging && !dragNearestAnchor) {
-                        setNavigatorText("კენჭი უნდა მიადოთ უკვე დადებულ კენჭს.");
-                      }
-
-                      // Clean up drag state
-                      setDragState(null);
-                      setDragNearestAnchor(null);
-                      setDragCalculatedSide(null);
-                    }}
-                    onMouseEnter={() => {
-                      if (!dragState?.isDragging) {
-                        setNavigatorText(getNavigatorTextForHandTile(tile));
-                      }
-                    }}
-                    onClick={(event) => {
-                      if (dragState?.isDragging) {
+                    draggable={!winner && !isAiThinking}
+                    onDragStart={(event) => {
+                      if (isAiThinking) {
                         event.preventDefault();
+                        setNavigatorText("დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.");
                         return;
                       }
+
+                      setDraggedTileId(tile.id);
+                      event.dataTransfer.setData("text/plain", tile.id);
+                    }}
+                    onMouseEnter={() => setNavigatorText(getNavigatorTextForHandTile(tile))}
+                    onClick={() => {
                       setSelectedTileId(tile.id);
                       setNavigatorText(getNavigatorTextForHandTile(tile));
                     }}
@@ -1636,30 +1462,6 @@ export default function RoomPage() {
           </div>
         </aside>
       </section>
-
-      {/* Drag Preview Overlay */}
-      {dragState?.isDragging && (
-        <div
-          className="dragPreviewOverlay"
-          style={{
-            left: `${dragState.currentX}px`,
-            top: `${dragState.currentY}px`,
-          }}
-        >
-          <div className={`${tileClass(dragState.tile.color)} dragPreviewTile`}>
-            <b>{dragState.tile.symbol}</b>
-            <span>{dragState.tile.name}</span>
-          </div>
-          {dragNearestAnchor && dragCalculatedSide && (
-            <div className="dragHintText">
-              {dragCalculatedSide === "right" && "მარჯვნივ"}
-              {dragCalculatedSide === "left" && "მარცხნივ"}
-              {dragCalculatedSide === "top" && "ზემოთ"}
-              {dragCalculatedSide === "bottom" && "ქვემოთ"}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Victory Modal */}
       {showVictoryModal && victoryInfo && (

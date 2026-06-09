@@ -6528,3 +6528,33 @@ html {
     grid-template-columns: 1fr;
   }
 }
+/* Observer mode actions */
+
+.observerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.observerActionButton {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  color: #fff8e7;
+  background: linear-gradient(135deg, #7f1e1e, #ba7a2a);
+  box-shadow: 0 10px 22px rgba(120, 55, 22, 0.18);
+}
+
+.observerActionButton.secondary {
+  color: #5a3520;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(113, 75, 36, 0.22);
+  box-shadow: none;
+}
+
+.observerActionButton:hover {
+  transform: translateY(-1px);
+}

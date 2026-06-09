@@ -1,8 +1,9 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
 
 type Player = {
   id: string;
@@ -81,6 +82,12 @@ type AllianceInfo = {
   player1Id: string;
   player2Id: string;
   sharedRedTiles: number;
+};
+
+type RoomPlayerRecord = {
+  name: string;
+  avatar: string;
+  is_host?: boolean;
 };
 
 const AI_MOVE_DELAY = 7000;
@@ -968,11 +975,14 @@ export default function RoomPage() {
   const mode = searchParams.get("mode") || "solo";
   const playerName = searchParams.get("name") || "მოთამაშე";
   const avatarId = searchParams.get("avatar") || "strategist";
+  const seatId = searchParams.get("seat") || "human";
+  const playerId = searchParams.get("playerId") || "";
 
   const [setup] = useState(() => createGameSetup(roomId));
   const [hand, setHand] = useState<GameTile[]>(setup.humanHand);
   const [marketDeck, setMarketDeck] = useState<GameTile[]>(setup.market);
   const [aiHands, setAiHands] = useState<Record<string, GameTile[]>>(setup.aiHands);
+  const [roomPlayers, setRoomPlayers] = useState<Record<string, RoomPlayerRecord>>({});
 
   const [board, setBoard] = useState<PlayedTile[]>([
     {
@@ -1025,25 +1035,89 @@ const [showAssessmentModal, setShowAssessmentModal] = useState(false);
 const [humanObserverMode, setHumanObserverMode] = useState(false);
 const [turnCounter, setTurnCounter] = useState(0);
 
-  const players: Player[] = useMemo(
-    () => [
+  useEffect(() => {
+    if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
+
+    let alive = true;
+
+    async function loadSharedRoomPlayers() {
+      const { data } = await supabase
+        .from("svlebi_room_players")
+        .select("seat_id,name,avatar,is_host")
+        .eq("room_code", roomId);
+
+      if (!alive) return;
+
+      const nextPlayers: Record<string, RoomPlayerRecord> = {};
+
+      (data || []).forEach((player) => {
+        nextPlayers[player.seat_id] = {
+          name: player.name,
+          avatar: player.avatar,
+          is_host: Boolean(player.is_host),
+        };
+      });
+
+      setRoomPlayers(nextPlayers);
+    }
+
+    loadSharedRoomPlayers();
+
+    const channel = supabase
+      .channel(`svlebi-room-players-${roomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "svlebi_room_players",
+          filter: `room_code=eq.${roomId}`,
+        },
+        () => loadSharedRoomPlayers()
+      )
+      .subscribe();
+
+    return () => {
+      alive = false;
+      supabase.removeChannel(channel);
+    };
+  }, [mode, roomId]);
+
+  const players: Player[] = useMemo(() => {
+    const hostRecord = roomPlayers.human;
+    const hostAvatarId =
+      mode === "group"
+        ? hostRecord?.avatar || (seatId === "human" ? avatarId : "strategist")
+        : avatarId;
+
+    const hostName =
+      mode === "group"
+        ? hostRecord?.name || (seatId === "human" ? playerName : "მასპინძელი")
+        : playerName;
+
+    return [
       {
         id: "human",
-        name: playerName,
-        avatar: avatarMap[avatarId] || "🧑🏻‍💼",
+        name: hostName,
+        avatar: avatarMap[hostAvatarId] || avatarMap[avatarId] || "🧑🏻‍💼",
         type: "human",
         tileCount: hand.length,
       },
-      ...aiPlayersBase.map((player) => ({
-        id: player.id,
-        name: player.name,
-        avatar: player.avatar,
-        type: "ai" as const,
-        tileCount: aiHands[player.id]?.length || 0,
-      })),
-    ],
-    [aiHands, avatarId, hand.length, playerName]
-  );
+      ...aiPlayersBase.map((player) => {
+        const realSeatPlayer = roomPlayers[player.id];
+
+        return {
+          id: player.id,
+          name: realSeatPlayer?.name || player.name,
+          avatar: realSeatPlayer
+            ? avatarMap[realSeatPlayer.avatar] || player.avatar
+            : player.avatar,
+          type: realSeatPlayer ? ("human" as const) : ("ai" as const),
+          tileCount: aiHands[player.id]?.length || 0,
+        };
+      }),
+    ];
+  }, [aiHands, avatarId, hand.length, mode, playerName, roomPlayers, seatId]);
 
   const boardScale =
     board.length > 30 ? 0.5 : board.length > 22 ? 0.58 : board.length > 14 ? 0.7 : 0.84;
@@ -1610,7 +1684,7 @@ function continueAiGameAsObserver() {
                     >
                       {look.emoji}
                     </div>
-                    <strong>{player.name}</strong>
+                    <strong>{mode === "group" && player.id === seatId ? `${player.name} (თქვენ)` : player.name}</strong>
 <span>
   {player.id === "human" && humanObserverMode
     ? "დაასრულა"

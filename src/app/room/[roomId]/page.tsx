@@ -1873,57 +1873,134 @@ export default function RoomPage() {
         </aside>
       </section>
 
-      {/* Victory Modal */}
-      {showVictoryModal && victoryInfo && (
-        <div className="modalOverlay v8ModalOverlay" onClick={() => setShowVictoryModal(false)}>
-          <div className="modalContent v8ModalContent" onClick={(e) => e.stopPropagation()}>
-            <h2 className="v8ModalTitle">
-              {victoryInfo.winnerIds.includes("human") ? "თქვენ გაიმარჯვეთ!" : "ამ ეტაპზე თქვენ დამარცხდით"}
-            </h2>
+{/* Victory Modal */}
+{showVictoryModal && victoryInfo && (
+  <div className="awardModalOverlay" onClick={() => setShowVictoryModal(false)}>
+    <div className="awardModalCard" onClick={(event) => event.stopPropagation()}>
+      <div className="awardGlow" />
 
-            <div className="v8ModalBody">
-              <p className="v8ModalWinnerType">
-                გამარჯვების ტიპი: {victoryInfo.type === "individual" ? "ინდივიდუალური" : victoryInfo.type === "alliance" ? "ალიანსი" : "ლიდერი"}
-              </p>
-
-              <p className="v8ModalWinners">
-                გამარჯვებული: {victoryInfo.winners.join(", ")}
-              </p>
-
-              <p className="v8ModalReason">{victoryInfo.reason}</p>
-
-              {victoryInfo.winnerIds.includes("human") ? (
-                <p className="v8ModalMessage">გილოცავთ! თქვენმა სტრატეგიამ ამ ეტაპზე იმუშავა.</p>
-              ) : (
-                <p className="v8ModalMessage">თუმცა უკვე გამოცდილება მიიღეთ და შემდეგ თამაშში უკეთეს სტრატეგიას ააწყობთ.</p>
-              )}
-            </div>
-
-            <div className="v8ModalButtons">
-              <button
-                className="v8ModalButton"
-                onClick={() => {
-                  setShowVictoryModal(false);
-                  if (victoryInfo.winnerIds.includes("human")) {
-                    setShowAssessmentModal(true);
-                  }
-                }}
-              >
-                თამაშის შეფასება
-              </button>
-              <button
-                className="v8ModalButton v8ModalSecondary"
-                onClick={() => {
-                  setShowVictoryModal(false);
-                  setGameEnded(false);
-                }}
-              >
-                თამაშში ბოლომდე დარჩენა
-              </button>
-            </div>
+      <div className="awardHeader">
+        <div className="awardSeal">
+          <div className="awardSealRing">
+            <img src="/svlebi-wheel-logo.png" alt="სვლები" className="awardSealLogo" />
           </div>
         </div>
-      )}
+
+        <div className="awardKicker">
+          {victoryInfo.winnerIds.includes("human")
+            ? "სტრატეგიული აღიარება"
+            : "თამაშის პოლიტიკური შედეგი"}
+        </div>
+
+        <h2 className="awardTitle">
+          {victoryInfo.winnerIds.includes("human")
+            ? "სვლების ორდენი"
+            : "პოლიტიკური გამოწვევის ანგარიში"}
+        </h2>
+
+        <p className="awardSubtitle">
+          {victoryInfo.winnerIds.includes("human")
+            ? "თქვენ მოიპოვეთ სტრატეგიული გავლენის ჯილდო"
+            : "ამ რაუნდში უპირატესობა სხვა პოლიტიკურ ძალას დარჩა"}
+        </p>
+      </div>
+
+      <div className="awardRibbon">
+        {victoryInfo.winnerIds.includes("human")
+          ? "გამარჯვებული სტრატეგი"
+          : "შემდეგი სტრატეგიისთვის მზადება"}
+      </div>
+
+      <div className="awardInfoGrid">
+        <div className="awardInfoBox">
+          <span>მოთამაშე</span>
+          <strong>{playerName}</strong>
+        </div>
+
+        <div className="awardInfoBox">
+          <span>სტატუსი</span>
+          <strong>
+            {victoryInfo.winnerIds.includes("human")
+              ? "გამარჯვება"
+              : "დამარცხება"}
+          </strong>
+        </div>
+
+        <div className="awardInfoBox">
+          <span>გამარჯვების ტიპი</span>
+          <strong>
+            {victoryInfo.type === "individual"
+              ? "ინდივიდუალური"
+              : victoryInfo.type === "alliance"
+                ? "ალიანსური"
+                : "ლიდერის"}
+          </strong>
+        </div>
+
+        <div className="awardInfoBox">
+          <span>გამარჯვებული</span>
+          <strong>{victoryInfo.winners.join(", ")}</strong>
+        </div>
+      </div>
+
+      <div className="awardReason">
+        <div className="awardReasonTitle">საბოლოო პოლიტიკური განმარტება</div>
+        <p>{victoryInfo.reason}</p>
+      </div>
+
+      <div className="awardMetrics">
+        <div>
+          <b>გავლენა</b>
+          <span>სტრატეგიული პოზიცია</span>
+        </div>
+        <div>
+          <b>ალიანსები</b>
+          <span>კავშირების მართვა</span>
+        </div>
+        <div>
+          <b>რისკი</b>
+          <span>ტაქტიკური გამბედაობა</span>
+        </div>
+        <div>
+          <b>ლიდერობა</b>
+          <span>პროცესის კონტროლი</span>
+        </div>
+      </div>
+
+      <p className="awardMessage">
+        {victoryInfo.winnerIds.includes("human")
+          ? "გილოცავთ! ამ თამაშში თქვენმა პოლიტიკურმა არჩევანმა, ტაქტიკურმა სვლებმა და გავლენის მართვამ შედეგი გამოიღო."
+          : "ეს შედეგი დამარცხება კი არა, სტრატეგიული გამოცდილებაა. შემდეგ თამაშში შეგიძლიათ უფრო ადრე შექმნათ ალიანსი, გააკონტროლოთ რისკი და უკეთ განსაზღვროთ ლიდერობის მომენტი."}
+      </p>
+
+      <div className="awardActions">
+        <button
+          className="awardPrimaryButton"
+          onClick={() => {
+            setShowVictoryModal(false);
+            if (victoryInfo.winnerIds.includes("human")) {
+              setShowAssessmentModal(true);
+            }
+          }}
+          type="button"
+        >
+          თამაშის შეფასება
+        </button>
+
+        <button
+          className="awardGhostButton"
+          onClick={() => {
+            setShowVictoryModal(false);
+            setGameEnded(false);
+          }}
+          type="button"
+        >
+          თამაშში ბოლომდე დარჩენა
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Assessment Modal */}
       {showAssessmentModal && (

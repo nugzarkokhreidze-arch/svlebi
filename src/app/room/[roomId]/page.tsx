@@ -1021,8 +1021,9 @@ export default function RoomPage() {
   const [gameEnded, setGameEnded] = useState(false);
   const [victoryInfo, setVictoryInfo] = useState<VictoryInfo | null>(null);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
-  const [showAssessmentModal, setShowAssessmentModal] = useState(false);
-  const [turnCounter, setTurnCounter] = useState(0);
+const [showAssessmentModal, setShowAssessmentModal] = useState(false);
+const [humanObserverMode, setHumanObserverMode] = useState(false);
+const [turnCounter, setTurnCounter] = useState(0);
 
   const players: Player[] = useMemo(
     () => [
@@ -1090,6 +1091,7 @@ export default function RoomPage() {
 
   function validateMove(tile: GameTile | undefined, anchor: PlayedTile) {
     if (!tile) return "ჯერ უნდა აირჩიო კენჭი.";
+    if (humanObserverMode) return "თქვენ უკვე დაასრულეთ თამაში და ახლა დამკვირვებლის რეჟიმში ხართ.";
     if (winner) return "თამაში უკვე დასრულებულია.";
     if (currentTurnId !== "human") {
       return "ეს არ არის თქვენი ჯერი. დაელოდე AI მოთამაშეების სვლას.";
@@ -1378,8 +1380,105 @@ export default function RoomPage() {
       }, AI_MOVE_DELAY);
     }, AI_MOVE_DELAY);
   }
+function continueAiGameAsObserver() {
+  setHumanObserverMode(true);
+  setShowVictoryModal(false);
+  setGameEnded(false);
+  setDraggedTileId(null);
+  setSelectedTileId("");
+  setIsAiThinking(true);
 
+  setNavigatorText(
+    "თქვენ დაასრულეთ თამაში და დარჩით დამკვირვებლის რეჟიმში. დარჩენილი მოთამაშეები პარტიას ბოლომდე აგრძელებენ."
+  );
+
+  setLog((previous) => [
+    `${playerName}-მა თამაში დაასრულა და დარჩა დამკვირვებლის რეჟიმში.`,
+    ...previous,
+  ]);
+
+  const localHands: Record<string, GameTile[]> = {};
+  Object.keys(aiHands).forEach((key) => {
+    localHands[key] = [...(aiHands[key] || [])];
+  });
+
+  let localBoard = [...board];
+
+  const makeNextObserverMove = () => {
+    const activeAiPlayers = aiPlayersBase.filter(
+      (player) => (localHands[player.id]?.length || 0) > 0
+    );
+
+    if (activeAiPlayers.length === 0) {
+      setIsAiThinking(false);
+      setGameEnded(true);
+      setCurrentTurnId("human");
+      setNavigatorText(
+        "დარჩენილმა მოთამაშეებმაც დაასრულეს პარტია. შეგიძლიათ ნახოთ შეფასება ან დაბრუნდეთ მთავარ გვერდზე."
+      );
+      setLog((previous) => [
+        "დამკვირვებლის რეჟიმში დარჩენილი პარტია დასრულდა.",
+        ...previous,
+      ]);
+      return;
+    }
+
+    const actor = activeAiPlayers[localBoard.length % activeAiPlayers.length];
+    const anchor = localBoard[localBoard.length - 1];
+    const tile = pickAiTileFromHands(localHands, actor.id, anchor.color);
+
+    if (!tile) {
+      localHands[actor.id] = [];
+      setTimeout(makeNextObserverMove, 700);
+      return;
+    }
+
+    const targetPool = aiPlayersBase.filter((player) => player.id !== actor.id);
+    const target = targetPool[localBoard.length % targetPool.length] || targetPool[0];
+
+    const side: AttachSide = localBoard.length % 2 === 0 ? "right" : "bottom";
+    const phrase = aiPhrases[localBoard.length % aiPhrases.length];
+
+    const aiMove = buildAiPlayedTile(
+      actor.id,
+      target.id,
+      anchor,
+      tile,
+      localBoard,
+      side
+    );
+
+    localBoard = [...localBoard, aiMove];
+    localHands[actor.id] = (localHands[actor.id] || []).filter(
+      (item) => item.id !== tile.id
+    );
+
+    setBoard([...localBoard]);
+    setAiHands({ ...localHands });
+    setCurrentTurnId(actor.id);
+    setLastPlacedTileId(aiMove.id);
+    setLastMoveTimestamp(Date.now());
+    setSelectedAnchorId(aiMove.id);
+    setSpotlight(actor.id, target.name, aiMove.name, phrase);
+
+    setLog((previous) => [
+      `${actor.name}-მა დამკვირვებლის რეჟიმში დადო კენჭი „${aiMove.name}“ მოთამაშის მიმართ: ${target.name}.`,
+      ...previous,
+    ]);
+
+    playSound("tile");
+
+    setTimeout(makeNextObserverMove, 1600);
+  };
+
+  setTimeout(makeNextObserverMove, 900);
+}
   function drawFromMarket() {
+    if (humanObserverMode) {
+      setNavigatorText("თქვენ უკვე დაასრულეთ თამაში და ახლა დამკვირვებლის რეჟიმში ხართ.");
+      return;
+    }
+
     if (winner) return;
 
     if (marketDeck.length <= 0) {
@@ -1512,7 +1611,13 @@ export default function RoomPage() {
                       {look.emoji}
                     </div>
                     <strong>{player.name}</strong>
-                    <span>{player.tileCount} კენჭი</span>
+<span>
+  {player.id === "human" && humanObserverMode
+    ? "დაასრულა"
+    : player.tileCount === 0
+      ? "დაასრულა"
+      : `${player.tileCount} კენჭი`}
+</span>
                   </div>
                 </div>
               );
@@ -1754,7 +1859,7 @@ export default function RoomPage() {
                   <button
                     className={`${tileClass(tile.color)} ${selectedTileId === tile.id ? "selectedRoomTile" : ""}`}
                     key={tile.id}
-                    draggable={!winner && !isAiThinking}
+                    draggable={!winner && !isAiThinking && !humanObserverMode}
                     onDragStart={(event) => {
                       if (isAiThinking) {
                         event.preventDefault();
@@ -1772,7 +1877,7 @@ export default function RoomPage() {
                     }}
                     title={tile.description}
                     type="button"
-                    disabled={Boolean(winner)}
+                    disabled={Boolean(winner) || humanObserverMode}
                   >
                     <b>{tile.symbol}</b>
                     <span>{tile.name}</span>
@@ -1782,9 +1887,31 @@ export default function RoomPage() {
             </div>
 
             <div className="bottomHelperPanel navigatorPanel">
-              <h3>ნავიგატორი — წესები, მნიშვნელობები, რჩევები</h3>
-              <p>{navigatorText}</p>
-            </div>
+  <h3>ნავიგატორი — წესები, მნიშვნელობები, რჩევები</h3>
+  <p>{navigatorText}</p>
+
+  {humanObserverMode && (
+    <div className="observerActions">
+      <button
+        className="observerActionButton"
+        onClick={() => setShowAssessmentModal(true)}
+        type="button"
+      >
+        შეფასების ნახვა
+      </button>
+
+      <button
+        className="observerActionButton secondary"
+        onClick={() => {
+          window.location.href = "/";
+        }}
+        type="button"
+      >
+        მთავარ გვერდზე დაბრუნება
+      </button>
+    </div>
+  )}
+</div>
           </div>
         </section>
 
@@ -1987,16 +2114,15 @@ export default function RoomPage() {
           თამაშის შეფასება
         </button>
 
-        <button
-          className="awardGhostButton"
-          onClick={() => {
-            setShowVictoryModal(false);
-            setGameEnded(false);
-          }}
-          type="button"
-        >
-          თამაშში ბოლომდე დარჩენა
-        </button>
+<button
+  className="awardGhostButton"
+  onClick={() => {
+    continueAiGameAsObserver();
+  }}
+  type="button"
+>
+  თამაშში ბოლომდე დარჩენა
+</button>
       </div>
     </div>
   </div>

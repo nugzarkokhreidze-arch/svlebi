@@ -35,6 +35,10 @@ function makeHostPlayerId(roomCode: string) {
   return `${roomCode}-human`;
 }
 
+function getHostStorageKey(roomCode: string) {
+  return `svlebi-host-${roomCode}`;
+}
+
 export default function SetupPage() {
   const [mode, setMode] = useState<GameMode>("solo");
   const [realPlayers, setRealPlayers] = useState(2);
@@ -134,6 +138,23 @@ export default function SetupPage() {
       if (!roomReady || !supabase) return;
 
       const hostPlayerId = makeHostPlayerId(roomCode);
+      const storedHostPlayerId = window.localStorage.getItem(getHostStorageKey(roomCode));
+
+      const { data: existingHost } = await supabase
+        .from("svlebi_room_players")
+        .select("id,name")
+        .eq("room_code", roomCode)
+        .eq("seat_id", "human")
+        .maybeSingle();
+
+      if (existingHost && storedHostPlayerId !== hostPlayerId) {
+        setStatusText(
+          `ამ ოთახს მასპინძელი უკვე ჰყავს: ${existingHost.name}. მოწვეული მოთამაშე უნდა შევიდეს მოსაწვევი ბმულით.`
+        );
+
+        window.location.href = `/join/${roomCode}?realPlayers=${realPlayers}`;
+        return;
+      }
 
       const { error } = await supabase.from("svlebi_room_players").upsert(
         {
@@ -151,6 +172,8 @@ export default function SetupPage() {
         setStatusText("მასპინძლის რეგისტრაცია ვერ მოხერხდა.");
         return;
       }
+
+      window.localStorage.setItem(getHostStorageKey(roomCode), hostPlayerId);
 
       const params = new URLSearchParams({
         mode,

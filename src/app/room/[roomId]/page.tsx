@@ -1135,7 +1135,8 @@ const [turnCounter, setTurnCounter] = useState(0);
 
     const serialized = JSON.stringify(nextState);
     lastSharedStateRef.current = serialized;
-    canWriteSharedStateRef.current = false;
+    canWriteSharedStateRef.current = true;
+    lastLocalChangeAtRef.current = Date.now();
 
     await supabase!
       .from("svlebi_rooms")
@@ -1431,12 +1432,41 @@ const [turnCounter, setTurnCounter] = useState(0);
     return players.find((player) => player.id === playerId) || players[0];
   }
 
+  function countPairMoves(currentBoard: PlayedTile[], firstId: string, secondId: string) {
+    return currentBoard.filter((tile) => {
+      if (tile.playedById === "system") return false;
+
+      return (
+        (tile.playedById === firstId && tile.targetId === secondId) ||
+        (tile.playedById === secondId && tile.targetId === firstId)
+      );
+    }).length;
+  }
+
+  function canPairPlay(firstId: string, secondId: string) {
+    return countPairMoves(board, firstId, secondId) < 3;
+  }
+
   function chooseTarget(anchor: PlayedTile) {
     if (mode === "group") {
-      const nextManualSeat = getNextManualSeat(localSeatId);
-      if (nextManualSeat && nextManualSeat !== localSeatId) {
-        return nextManualSeat;
+      const allSeatIds = SEAT_ORDER.filter((id) => id !== localSeatId);
+
+      if (
+        anchor.playedById !== localSeatId &&
+        anchor.playedById !== "system" &&
+        allSeatIds.includes(anchor.playedById) &&
+        canPairPlay(localSeatId, anchor.playedById)
+      ) {
+        return anchor.playedById;
       }
+
+      const availableTargets = allSeatIds.filter((id) => canPairPlay(localSeatId, id));
+
+      if (availableTargets.length > 0) {
+        return availableTargets[board.length % availableTargets.length];
+      }
+
+      return allSeatIds[board.length % allSeatIds.length] || "human";
     }
 
     if (anchor.playedById !== "human" && anchor.playedById !== "system") {
@@ -1573,6 +1603,14 @@ const [turnCounter, setTurnCounter] = useState(0);
     const targetId = chooseTarget(anchor);
     const targetName = getPlayerName(targetId);
 
+    if (mode === "group" && countPairMoves(board, localSeatId, targetId) >= 3) {
+      setNavigatorText(
+        "ამ ორ მოთამაშეს შორის უკვე შესრულდა 3 სვლა. აირჩიეთ სხვა მიმართულება ან სხვა სამიზნე."
+      );
+      setDraggedTileId(null);
+      return;
+    }
+
     const sideToUse = forcedSide || selectedSide;
     const rawPos = getPositionBySide(anchor, sideToUse, board.length);
     const safePos = findSafePosition(rawPos.x, rawPos.y, board);
@@ -1691,7 +1729,7 @@ const [turnCounter, setTurnCounter] = useState(0);
 
         const aiReply = buildAiPlayedTile(
           targetId,
-          "human",
+          localSeatId,
           humanPlayedTile,
           aiResponseTile,
           boardAfterHuman,
@@ -1710,6 +1748,8 @@ const [turnCounter, setTurnCounter] = useState(0);
         }));
 
         setSpotlight(targetId, playerName, aiReply.name, phrase);
+
+        markSharedLocalChange();
 
         setLog((previous) => [
           `${targetName}-მა უპასუხა კენჭით „${aiReply.name}“.`,
@@ -1770,6 +1810,8 @@ const [turnCounter, setTurnCounter] = useState(0);
         }));
 
         setSpotlight(independentActor.id, independentTarget.name, independentMove.name, phrase);
+
+        markSharedLocalChange();
 
         setLog((previous) => [
           `${independentActor.name}-მა დადო კენჭი „${independentMove.name}“ მოთამაშის მიმართ: ${independentTarget.name}.`,

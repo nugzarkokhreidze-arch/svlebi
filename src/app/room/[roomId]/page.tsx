@@ -1041,7 +1041,7 @@ const [turnCounter, setTurnCounter] = useState(0);
     let alive = true;
 
     async function loadSharedRoomPlayers() {
-      const { data } = await supabase
+      const { data } = await supabase!
         .from("svlebi_room_players")
         .select("seat_id,name,avatar,is_host")
         .eq("room_code", roomId);
@@ -1063,7 +1063,7 @@ const [turnCounter, setTurnCounter] = useState(0);
 
     loadSharedRoomPlayers();
 
-    const channel = supabase
+    const channel = supabase!
       .channel(`svlebi-room-players-${roomId}`)
       .on(
         "postgres_changes",
@@ -1079,7 +1079,7 @@ const [turnCounter, setTurnCounter] = useState(0);
 
     return () => {
       alive = false;
-      supabase.removeChannel(channel);
+      supabase!.removeChannel(channel);
     };
   }, [mode, roomId]);
 

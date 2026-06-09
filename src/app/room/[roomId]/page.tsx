@@ -766,7 +766,7 @@ export default function RoomPage() {
     }
     if (isAiThinking) return "დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.";
     if (!anchor) return "აირჩიეთ ადგილი დაფაზე რომელზეც კენჭი დაიდება.";
-    if (board.length === 1 && tile.baseId !== "start-green") {
+    if (board.length === 0 && tile.baseId !== "start-green") {
       return 'პირველი სვლა მხოლოდ "სვლა" კენჭით შეიძლება.';
     }
 

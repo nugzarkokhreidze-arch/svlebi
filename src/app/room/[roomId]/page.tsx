@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { isSupabaseConfigured, supabase } from "../../../lib/supabaseClient";
 
@@ -89,6 +89,23 @@ type RoomPlayerRecord = {
   avatar: string;
   is_host?: boolean;
 };
+
+type SharedRoomState = {
+  board: PlayedTile[];
+  hand: GameTile[];
+  aiHands: Record<string, GameTile[]>;
+  marketDeck: GameTile[];
+  log: string[];
+  currentTurnId: string;
+  leaderId: string | null;
+  leaderSinceTurn: number;
+  turnCounter: number;
+  winner: string | null;
+  victoryInfo: VictoryInfo | null;
+  gameEnded: boolean;
+};
+
+const SEAT_ORDER = ["human", "ai-1", "ai-2", "ai-3", "ai-4", "ai-5"];
 
 const AI_MOVE_DELAY = 7000;
 
@@ -977,6 +994,7 @@ export default function RoomPage() {
   const avatarId = searchParams.get("avatar") || "strategist";
   const seatId = searchParams.get("seat") || "human";
   const playerId = searchParams.get("playerId") || "";
+  const localSeatId = mode === "group" ? seatId : "human";
 
   const [setup] = useState(() => createGameSetup(roomId));
   const [hand, setHand] = useState<GameTile[]>(setup.humanHand);
@@ -1034,6 +1052,8 @@ export default function RoomPage() {
 const [showAssessmentModal, setShowAssessmentModal] = useState(false);
 const [humanObserverMode, setHumanObserverMode] = useState(false);
 const [turnCounter, setTurnCounter] = useState(0);
+  const [sharedHydrated, setSharedHydrated] = useState(mode !== "group");
+  const lastSharedStateRef = useRef("");
 
   useEffect(() => {
     if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
@@ -1083,6 +1103,170 @@ const [turnCounter, setTurnCounter] = useState(0);
     };
   }, [mode, roomId]);
 
+  function buildSharedStateSnapshot(): SharedRoomState {
+    return {
+      board,
+      hand,
+      aiHands,
+      marketDeck,
+      log,
+      currentTurnId,
+      leaderId,
+      leaderSinceTurn,
+      turnCounter,
+      winner,
+      victoryInfo,
+      gameEnded,
+    };
+  }
+
+  function applySharedState(state: Partial<SharedRoomState> | null) {
+    if (!state) return;
+
+    if (state.board) setBoard(state.board);
+    if (state.hand) setHand(state.hand);
+    if (state.aiHands) setAiHands(state.aiHands);
+    if (state.marketDeck) setMarketDeck(state.marketDeck);
+    if (state.log) setLog(state.log);
+    if (state.currentTurnId) setCurrentTurnId(state.currentTurnId);
+    if (typeof state.leaderId !== "undefined") setLeaderId(state.leaderId);
+    if (typeof state.leaderSinceTurn === "number") setLeaderSinceTurn(state.leaderSinceTurn);
+    if (typeof state.turnCounter === "number") setTurnCounter(state.turnCounter);
+    if (typeof state.winner !== "undefined") setWinner(state.winner);
+    if (typeof state.victoryInfo !== "undefined") setVictoryInfo(state.victoryInfo);
+    if (typeof state.gameEnded === "boolean") setGameEnded(state.gameEnded);
+  }
+
+  function getManualSeatIds() {
+    if (mode !== "group") return ["human"];
+
+    return SEAT_ORDER.filter((id) => id === "human" || Boolean(roomPlayers[id]));
+  }
+
+  function getNextManualSeat(afterSeatId: string) {
+    const manualSeats = getManualSeatIds();
+
+    if (manualSeats.length === 0) return "human";
+
+    const index = manualSeats.indexOf(afterSeatId);
+
+    if (index === -1) return manualSeats[0];
+
+    return manualSeats[(index + 1) % manualSeats.length];
+  }
+
+  function isSeatControlledByRealPlayer(targetSeatId: string) {
+    if (mode !== "group") return targetSeatId === "human";
+    return targetSeatId === "human" || Boolean(roomPlayers[targetSeatId]);
+  }
+
+  useEffect(() => {
+    if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
+
+    let alive = true;
+
+    async function loadSharedGameState() {
+      const { data } = await supabase!
+        .from("svlebi_rooms")
+        .select("game_state")
+        .eq("room_code", roomId)
+        .maybeSingle();
+
+      if (!alive) return;
+
+      const state = data?.game_state as SharedRoomState | null;
+
+      if (state) {
+        lastSharedStateRef.current = JSON.stringify(state);
+        applySharedState(state);
+      } else if (localSeatId === "human") {
+        const initialState = buildSharedStateSnapshot();
+        const serialized = JSON.stringify(initialState);
+        lastSharedStateRef.current = serialized;
+
+        await supabase!
+          .from("svlebi_rooms")
+          .update({
+            game_state: initialState,
+            status: "playing",
+          })
+          .eq("room_code", roomId);
+      }
+
+      setSharedHydrated(true);
+    }
+
+    loadSharedGameState();
+
+    const channel = supabase!
+      .channel(`svlebi-game-state-${roomId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "svlebi_rooms",
+          filter: `room_code=eq.${roomId}`,
+        },
+        (payload) => {
+          const nextState = payload.new?.game_state as SharedRoomState | null;
+          if (!nextState) return;
+
+          const serialized = JSON.stringify(nextState);
+          if (serialized === lastSharedStateRef.current) return;
+
+          lastSharedStateRef.current = serialized;
+          applySharedState(nextState);
+          setSharedHydrated(true);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      alive = false;
+      supabase!.removeChannel(channel);
+    };
+  }, [mode, roomId, localSeatId]);
+
+  useEffect(() => {
+    if (mode !== "group" || !sharedHydrated || !isSupabaseConfigured || !supabase) return;
+
+    const nextState = buildSharedStateSnapshot();
+    const serialized = JSON.stringify(nextState);
+
+    if (serialized === lastSharedStateRef.current) return;
+
+    lastSharedStateRef.current = serialized;
+
+    const timer = window.setTimeout(() => {
+      supabase!
+        .from("svlebi_rooms")
+        .update({
+          game_state: nextState,
+          status: gameEnded ? "ended" : "playing",
+        })
+        .eq("room_code", roomId);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    mode,
+    sharedHydrated,
+    roomId,
+    board,
+    hand,
+    aiHands,
+    marketDeck,
+    log,
+    currentTurnId,
+    leaderId,
+    leaderSinceTurn,
+    turnCounter,
+    winner,
+    victoryInfo,
+    gameEnded,
+  ]);
+
   const players: Player[] = useMemo(() => {
     const hostRecord = roomPlayers.human;
     const hostAvatarId =
@@ -1118,6 +1302,11 @@ const [turnCounter, setTurnCounter] = useState(0);
       }),
     ];
   }, [aiHands, avatarId, hand.length, mode, playerName, roomPlayers, seatId]);
+
+  const currentPlayerHand = useMemo(() => {
+    if (localSeatId === "human") return hand;
+    return aiHands[localSeatId] || [];
+  }, [aiHands, hand, localSeatId]);
 
   const boardScale =
     board.length > 30 ? 0.5 : board.length > 22 ? 0.58 : board.length > 14 ? 0.7 : 0.84;
@@ -1167,8 +1356,8 @@ const [turnCounter, setTurnCounter] = useState(0);
     if (!tile) return "ჯერ უნდა აირჩიო კენჭი.";
     if (humanObserverMode) return "თქვენ უკვე დაასრულეთ თამაში და ახლა დამკვირვებლის რეჟიმში ხართ.";
     if (winner) return "თამაში უკვე დასრულებულია.";
-    if (currentTurnId !== "human") {
-      return "ეს არ არის თქვენი ჯერი. დაელოდე AI მოთამაშეების სვლას.";
+    if (currentTurnId !== localSeatId) {
+      return "ახლა თქვენი სვლა არ არის. დაელოდეთ თქვენს რიგს.";
     }
     if (isAiThinking) return "დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.";
     if (!anchor) return "აირჩიეთ ადგილი დაფაზე რომელზეც კენჭი დაიდება.";
@@ -1254,7 +1443,7 @@ const [turnCounter, setTurnCounter] = useState(0);
 
   function chooseIndependentAiActor(excludeId: string, hands: Record<string, GameTile[]>) {
     const available = aiPlayersBase.filter(
-      (player) => player.id !== excludeId && (hands[player.id]?.length || 0) > 0
+      (player) => player.id !== excludeId && !isSeatControlledByRealPlayer(player.id) && (hands[player.id]?.length || 0) > 0
     );
 
     if (available.length === 0) return null;
@@ -1275,7 +1464,7 @@ const [turnCounter, setTurnCounter] = useState(0);
   }
 
   function playTileOnAnchor(anchor: PlayedTile, forcedTileId?: string, forcedSide?: AttachSide) {
-    const tileToPlay = hand.find((tile) => tile.id === (forcedTileId || selectedTileId));
+    const tileToPlay = currentPlayerHand.find((tile) => tile.id === (forcedTileId || selectedTileId));
     const validationError = validateMove(tileToPlay, anchor);
 
     if (validationError) {
@@ -1294,8 +1483,8 @@ const [turnCounter, setTurnCounter] = useState(0);
     const humanPlayedTile: PlayedTile = {
       ...tileToPlay!,
       id: makeId(`${tileToPlay!.baseId}-human`),
-      playedBy: playerName,
-      playedById: "human",
+      playedBy: getPlayerName(localSeatId),
+      playedById: localSeatId,
       targetName,
       targetId,
       moveType: "human",
@@ -1305,12 +1494,20 @@ const [turnCounter, setTurnCounter] = useState(0);
       orientation: selectedOrientation,
     };
 
-    const remainingHand = hand.filter((tile) => tile.id !== tileToPlay!.id);
+    const remainingHand = currentPlayerHand.filter((tile) => tile.id !== tileToPlay!.id);
     const boardAfterHuman = [...board, humanPlayedTile];
 
     setIsAiThinking(true);
     setCurrentTurnId(targetId);
-    setHand(remainingHand);
+    if (localSeatId === "human") {
+      setHand(remainingHand);
+    } else {
+      setAiHands((previous) => ({
+        ...previous,
+        [localSeatId]: remainingHand,
+      }));
+    }
+
     setSelectedTileId(remainingHand[0]?.id || "");
     setSelectedAnchorId(humanPlayedTile.id);
     setBoard(boardAfterHuman);
@@ -1318,10 +1515,10 @@ const [turnCounter, setTurnCounter] = useState(0);
     setLastMoveTimestamp(Date.now());
     setDraggedTileId(null);
     setNavigatorText(`${tileToPlay!.name}: ${tileToPlay!.description}`);
-    setSpotlight("human", targetName, tileToPlay!.name, "ვაკეთებ ჩემს სვლას.");
+    setSpotlight(localSeatId, targetName, tileToPlay!.name, "ვაკეთებ ჩემს სვლას.");
 
     setLog((previous) => [
-      `${playerName}-მა დადო კენჭი „${tileToPlay!.name}“ მოთამაშის მიმართ: ${targetName}.`,
+      `${getPlayerName(localSeatId)}-მა დადო კენჭი „${tileToPlay!.name}“ მოთამაშის მიმართ: ${targetName}.`,
       ...previous,
     ]);
 
@@ -1329,24 +1526,36 @@ const [turnCounter, setTurnCounter] = useState(0);
 
     // Track leader (L tiles)
     if (tileToPlay!.symbol === "L") {
-      setLeaderId("human");
+      setLeaderId(localSeatId);
       setLeaderSinceTurn(board.length);
     }
 
     if (remainingHand.length === 0) {
-      setWinner(playerName);
-      setLog((previous) => [`თამაში დასრულდა — ${playerName}-მა პირველმა დაცალა კენჭები.`, ...previous]);
+      setWinner(getPlayerName(localSeatId));
+      setLog((previous) => [`თამაში დასრულდა — ${getPlayerName(localSeatId)}-მა პირველმა დაცალა კენჭები.`, ...previous]);
       setNavigatorText("გილოცავ! შენ პირველმა დაცალე კენჭები.");
       setVictoryInfo({
         type: "individual",
-        winners: [playerName],
-        winnerIds: ["human"],
-        reason: `${playerName} პირველმა დაცალა ყველა კენჭი.`,
+        winners: [getPlayerName(localSeatId)],
+        winnerIds: [localSeatId],
+        reason: `${getPlayerName(localSeatId)} პირველმა დაცალა ყველა კენჭი.`,
       });
       setGameEnded(true);
       setShowVictoryModal(true);
       setIsAiThinking(false);
       setCurrentTurnId("human");
+      return;
+    }
+
+    const targetIsRealControlled = isSeatControlledByRealPlayer(targetId);
+
+    if (targetIsRealControlled && targetId !== localSeatId) {
+      setCurrentTurnId(targetId);
+      setIsAiThinking(false);
+      setLog((previous) => [
+        `${targetName}-ის რიგია. დაელოდეთ მის სვლას.`,
+        ...previous,
+      ]);
       return;
     }
 
@@ -1393,7 +1602,7 @@ const [turnCounter, setTurnCounter] = useState(0);
       const independentActor = chooseIndependentAiActor(targetId, aiHands);
 
       if (!independentActor) {
-        setCurrentTurnId("human");
+        setCurrentTurnId(getNextManualSeat(localSeatId));
         setIsAiThinking(false);
         return;
       }
@@ -1408,7 +1617,7 @@ const [turnCounter, setTurnCounter] = useState(0);
         );
 
         if (!independentTile) {
-          setCurrentTurnId("human");
+          setCurrentTurnId(getNextManualSeat(localSeatId));
           setIsAiThinking(false);
           return;
         }
@@ -1448,7 +1657,7 @@ const [turnCounter, setTurnCounter] = useState(0);
         playSound("tile");
 
         setTimeout(() => {
-          setCurrentTurnId("human");
+          setCurrentTurnId(getNextManualSeat(localSeatId));
           setIsAiThinking(false);
         }, 1200);
       }, AI_MOVE_DELAY);
@@ -1568,9 +1777,17 @@ function continueAiGameAsObserver() {
     const [newTile, ...rest] = marketDeck;
 
     setMarketDeck(rest);
-    setHand((previous) => [...previous, newTile]);
+    if (localSeatId === "human") {
+      setHand((previous) => [...previous, newTile]);
+    } else {
+      setAiHands((previous) => ({
+        ...previous,
+        [localSeatId]: [...(previous[localSeatId] || []), newTile],
+      }));
+    }
+
     setSelectedTileId(newTile.id);
-    setLog((previous) => [`${playerName}-მა ბაზრიდან აიღო კენჭი „${newTile.name}“.`, ...previous]);
+    setLog((previous) => [`${getPlayerName(localSeatId)}-მა ბაზრიდან აიღო კენჭი „${newTile.name}“.`, ...previous]);
     setNavigatorText(`${newTile.name}: ${newTile.description}`);
     playSound("tile");
   }
@@ -1918,7 +2135,7 @@ function continueAiGameAsObserver() {
             </div>
 
             <div className="dragOnlyHint">
-              {isAiThinking ? "AI მოთამაშის სვლა მზადდება..." : "კენჭი დაიდება მხოლოდ გადათრევით."}
+              {currentTurnId !== localSeatId ? "ახლა სხვა მოთამაშის სვლაა..." : isAiThinking ? "AI მოთამაშის სვლა მზადდება..." : "კენჭი დაიდება მხოლოდ გადათრევით."}
             </div>
           </div>
 
@@ -1929,11 +2146,11 @@ function continueAiGameAsObserver() {
               </div>
 
               <div className="bottomVerticalHandTiles compactBottomTiles">
-                {hand.map((tile) => (
+                {currentPlayerHand.map((tile) => (
                   <button
                     className={`${tileClass(tile.color)} ${selectedTileId === tile.id ? "selectedRoomTile" : ""}`}
                     key={tile.id}
-                    draggable={!winner && !isAiThinking && !humanObserverMode}
+                    draggable={!winner && !isAiThinking && !humanObserverMode && currentTurnId === localSeatId}
                     onDragStart={(event) => {
                       if (isAiThinking) {
                         event.preventDefault();

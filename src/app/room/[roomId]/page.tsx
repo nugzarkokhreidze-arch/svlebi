@@ -1130,6 +1130,26 @@ const [turnCounter, setTurnCounter] = useState(0);
     };
   }
 
+  async function saveSharedStateNow(nextState: SharedRoomState) {
+    if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
+
+    const serialized = JSON.stringify(nextState);
+    lastSharedStateRef.current = serialized;
+    canWriteSharedStateRef.current = false;
+
+    await supabase!
+      .from("svlebi_rooms")
+      .upsert(
+        {
+          room_code: roomId,
+          real_players: Number.isFinite(roomRealPlayers) ? roomRealPlayers : 2,
+          game_state: nextState,
+          status: nextState.gameEnded ? "ended" : "playing",
+        },
+        { onConflict: "room_code" }
+      );
+  }
+
   function applySharedState(state: Partial<SharedRoomState> | null) {
     if (!state) return;
 
@@ -1573,16 +1593,26 @@ const [turnCounter, setTurnCounter] = useState(0);
 
     const remainingHand = currentPlayerHand.filter((tile) => tile.id !== tileToPlay!.id);
     const boardAfterHuman = [...board, humanPlayedTile];
+    const handAfterHuman = localSeatId === "human" ? remainingHand : hand;
+    const aiHandsAfterHuman =
+      localSeatId === "human"
+        ? aiHands
+        : {
+            ...aiHands,
+            [localSeatId]: remainingHand,
+          };
+
+    const logAfterHuman = [
+      `${getPlayerName(localSeatId)}-მა დადო კენჭი „${tileToPlay!.name}“ მოთამაშის მიმართ: ${targetName}.`,
+      ...log,
+    ];
 
     setIsAiThinking(true);
     setCurrentTurnId(targetId);
     if (localSeatId === "human") {
       setHand(remainingHand);
     } else {
-      setAiHands((previous) => ({
-        ...previous,
-        [localSeatId]: remainingHand,
-      }));
+      setAiHands(aiHandsAfterHuman);
     }
 
     setSelectedTileId(remainingHand[0]?.id || "");
@@ -1594,18 +1624,33 @@ const [turnCounter, setTurnCounter] = useState(0);
     setNavigatorText(`${tileToPlay!.name}: ${tileToPlay!.description}`);
     setSpotlight(localSeatId, targetName, tileToPlay!.name, "ვაკეთებ ჩემს სვლას.");
 
-    setLog((previous) => [
-      `${getPlayerName(localSeatId)}-მა დადო კენჭი „${tileToPlay!.name}“ მოთამაშის მიმართ: ${targetName}.`,
-      ...previous,
-    ]);
+    setLog(logAfterHuman);
 
     playSound("tile");
+
+    const leaderIdAfterHuman = tileToPlay!.symbol === "L" ? localSeatId : leaderId;
+    const leaderSinceTurnAfterHuman = tileToPlay!.symbol === "L" ? board.length : leaderSinceTurn;
 
     // Track leader (L tiles)
     if (tileToPlay!.symbol === "L") {
       setLeaderId(localSeatId);
       setLeaderSinceTurn(board.length);
     }
+
+    void saveSharedStateNow({
+      board: boardAfterHuman,
+      hand: handAfterHuman,
+      aiHands: aiHandsAfterHuman,
+      marketDeck,
+      log: logAfterHuman,
+      currentTurnId: targetId,
+      leaderId: leaderIdAfterHuman,
+      leaderSinceTurn: leaderSinceTurnAfterHuman,
+      turnCounter: turnCounter + 1,
+      winner,
+      victoryInfo,
+      gameEnded,
+    });
 
     if (remainingHand.length === 0) {
       setWinner(getPlayerName(localSeatId));
@@ -1855,6 +1900,20 @@ function continueAiGameAsObserver() {
     markSharedLocalChange();
 
     const [newTile, ...rest] = marketDeck;
+    const marketDeckAfterDraw = rest;
+    const handAfterDraw = localSeatId === "human" ? [...hand, newTile] : hand;
+    const aiHandsAfterDraw =
+      localSeatId === "human"
+        ? aiHands
+        : {
+            ...aiHands,
+            [localSeatId]: [...(aiHands[localSeatId] || []), newTile],
+          };
+
+    const logAfterDraw = [
+      `${getPlayerName(localSeatId)}-მა ბაზრიდან აიღო კენჭი „${newTile.name}“.`,
+      ...log,
+    ];
 
     setMarketDeck(rest);
     if (localSeatId === "human") {
@@ -1867,9 +1926,24 @@ function continueAiGameAsObserver() {
     }
 
     setSelectedTileId(newTile.id);
-    setLog((previous) => [`${getPlayerName(localSeatId)}-მა ბაზრიდან აიღო კენჭი „${newTile.name}“.`, ...previous]);
+    setLog(logAfterDraw);
     setNavigatorText(`${newTile.name}: ${newTile.description}`);
     playSound("tile");
+
+    void saveSharedStateNow({
+      board,
+      hand: handAfterDraw,
+      aiHands: aiHandsAfterDraw,
+      marketDeck: marketDeckAfterDraw,
+      log: logAfterDraw,
+      currentTurnId,
+      leaderId,
+      leaderSinceTurn,
+      turnCounter,
+      winner,
+      victoryInfo,
+      gameEnded,
+    });
   }
 
   function sendChatMessage() {

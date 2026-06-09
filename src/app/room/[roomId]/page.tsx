@@ -994,6 +994,7 @@ export default function RoomPage() {
   const avatarId = searchParams.get("avatar") || "strategist";
   const seatId = searchParams.get("seat") || "human";
   const playerId = searchParams.get("playerId") || "";
+  const roomRealPlayers = Number(searchParams.get("realPlayers") || "2");
   const localSeatId = mode === "group" ? seatId : "human";
 
   const [setup] = useState(() => createGameSetup(roomId));
@@ -1186,11 +1187,15 @@ const [turnCounter, setTurnCounter] = useState(0);
 
         await supabase!
           .from("svlebi_rooms")
-          .update({
-            game_state: initialState,
-            status: "playing",
-          })
-          .eq("room_code", roomId);
+          .upsert(
+            {
+              room_code: roomId,
+              real_players: Number.isFinite(roomRealPlayers) ? roomRealPlayers : 2,
+              game_state: initialState,
+              status: "playing",
+            },
+            { onConflict: "room_code" }
+          );
       }
 
       setSharedHydrated(true);
@@ -1241,11 +1246,15 @@ const [turnCounter, setTurnCounter] = useState(0);
     const timer = window.setTimeout(() => {
       supabase!
         .from("svlebi_rooms")
-        .update({
-          game_state: nextState,
-          status: gameEnded ? "ended" : "playing",
-        })
-        .eq("room_code", roomId);
+        .upsert(
+          {
+            room_code: roomId,
+            real_players: Number.isFinite(roomRealPlayers) ? roomRealPlayers : 2,
+            game_state: nextState,
+            status: gameEnded ? "ended" : "playing",
+          },
+          { onConflict: "room_code" }
+        );
     }, 250);
 
     return () => window.clearTimeout(timer);
@@ -1265,7 +1274,35 @@ const [turnCounter, setTurnCounter] = useState(0);
     winner,
     victoryInfo,
     gameEnded,
+    roomRealPlayers,
   ]);
+
+  useEffect(() => {
+    if (mode !== "group" || !sharedHydrated || !isSupabaseConfigured || !supabase) return;
+
+    const pollId = window.setInterval(async () => {
+      const { data } = await supabase!
+        .from("svlebi_rooms")
+        .select("game_state")
+        .eq("room_code", roomId)
+        .maybeSingle();
+
+      const nextState = data?.game_state as SharedRoomState | null;
+
+      if (!nextState) return;
+
+      const serialized = JSON.stringify(nextState);
+
+      if (serialized === lastSharedStateRef.current) return;
+
+      lastSharedStateRef.current = serialized;
+      applySharedState(nextState);
+    }, 1200);
+
+    return () => window.clearInterval(pollId);
+  }, [mode, roomId, sharedHydrated]);
+
+  // svlebi-game-state-polling
 
   const players: Player[] = useMemo(() => {
     const hostRecord = roomPlayers.human;

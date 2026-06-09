@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type GameMode = "solo" | "group";
 
@@ -26,16 +26,24 @@ function createRoomCode() {
   return code;
 }
 
+function cleanRoomCode(value: string) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+}
+
 export default function SetupPage() {
   const [mode, setMode] = useState<GameMode>("solo");
   const [realPlayers, setRealPlayers] = useState(2);
   const [nickname, setNickname] = useState("");
   const [selectedAvatar, setSelectedAvatar] = useState(avatars[0].id);
   const [roomCode, setRoomCode] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const modeFromUrl = params.get("mode");
+    const roomFromUrl = params.get("room");
+    const realPlayersFromUrl = Number(params.get("realPlayers"));
 
     if (modeFromUrl === "group") {
       setMode("group");
@@ -45,10 +53,45 @@ export default function SetupPage() {
       setMode("solo");
     }
 
-    setRoomCode(createRoomCode());
+    if (Number.isFinite(realPlayersFromUrl) && realPlayersFromUrl >= 2 && realPlayersFromUrl <= 6) {
+      setRealPlayers(realPlayersFromUrl);
+    }
+
+    const preparedRoomCode = roomFromUrl ? cleanRoomCode(roomFromUrl) : "";
+
+    setRoomCode(preparedRoomCode || createRoomCode());
+    setBaseUrl(window.location.origin);
   }, []);
 
   const aiPlayers = mode === "solo" ? 5 : 6 - realPlayers;
+
+  const inviteLink = useMemo(() => {
+    if (mode !== "group" || !roomCode || !baseUrl) return "";
+
+    const params = new URLSearchParams({
+      mode: "group",
+      room: roomCode,
+      realPlayers: String(realPlayers),
+    });
+
+    return `${baseUrl}/setup?${params.toString()}`;
+  }, [baseUrl, mode, realPlayers, roomCode]);
+
+  async function copyInviteLink() {
+    if (!inviteLink) return;
+
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopiedInviteLink(true);
+    } catch {
+      window.prompt("დააკოპირეთ მოსაწვევი ბმული:", inviteLink);
+      setCopiedInviteLink(true);
+    }
+
+    window.setTimeout(() => {
+      setCopiedInviteLink(false);
+    }, 1800);
+  }
 
   function startGame() {
     const cleanName = nickname.trim() || "მოთამაშე";
@@ -201,9 +244,46 @@ export default function SetupPage() {
         </div>
 
         {mode === "group" && (
-          <div className="shareNotice">
-            შემდეგ ეტაპზე აქ გამოჩნდება გასაზიარებელი ბმული. ამ ბმულით სხვა
-            მოთამაშეები შემოვლენ ზუსტად ამავე თამაშში.
+          <div className="shareNotice inviteLinkBox">
+            <div className="inviteLinkHeader">
+              <div>
+                <strong>მეგობრის მოსაწვევი ბმული</strong>
+                <p>
+                  გაუზიარე ეს ბმული მეგობარს. ის შევა ამავე ოთახის კოდით,
+                  აირჩევს საკუთარ სახელს და ავატარს.
+                </p>
+              </div>
+
+              <button
+                className="smallInviteButton"
+                onClick={() => setRoomCode(createRoomCode())}
+                type="button"
+              >
+                ახალი კოდი
+              </button>
+            </div>
+
+            <div className="inviteLinkRow">
+              <input
+                className="inviteLinkInput"
+                value={inviteLink || "ბმული იქმნება..."}
+                readOnly
+                onFocus={(event) => event.currentTarget.select()}
+              />
+
+              <button
+                className="copyInviteButton"
+                onClick={copyInviteLink}
+                type="button"
+              >
+                {copiedInviteLink ? "დაკოპირდა ✓" : "ბმულის კოპირება"}
+              </button>
+            </div>
+
+            <p className="inviteHint">
+              მეგობარი ბმულზე გადასვლის შემდეგ დააჭერს „თამაშის შექმნა“-ს და
+              შევა იგივე ოთახში: <b>{roomCode}</b>
+            </p>
           </div>
         )}
 

@@ -868,7 +868,7 @@ export default function RoomPage() {
     });
   }
 
-  function playTileOnAnchor(anchor: PlayedTile, forcedTileId?: string) {
+  function playTileOnAnchor(anchor: PlayedTile, forcedTileId?: string, forcedSide?: AttachSide) {
     const tileToPlay = hand.find((tile) => tile.id === (forcedTileId || selectedTileId));
     const validationError = validateMove(tileToPlay, anchor);
 
@@ -881,7 +881,8 @@ export default function RoomPage() {
     const targetId = chooseTarget(anchor);
     const targetName = getPlayerName(targetId);
 
-    const rawPos = getPositionBySide(anchor, selectedSide, board.length);
+    const sideToUse = forcedSide || selectedSide;
+    const rawPos = getPositionBySide(anchor, sideToUse, board.length);
     const safePos = findSafePosition(rawPos.x, rawPos.y, board);
 
     const humanPlayedTile: PlayedTile = {
@@ -957,7 +958,7 @@ export default function RoomPage() {
           humanPlayedTile,
           aiResponseTile,
           boardAfterHuman,
-          oppositeSide(selectedSide)
+          oppositeSide(sideToUse)
         );
 
         boardAfterResponse = [...boardAfterHuman, aiReply];
@@ -1232,6 +1233,84 @@ export default function RoomPage() {
             <div
               className="verticalDominoCanvas v8DominoCanvas"
               style={{ "--boardScale": String(boardScale) } as CSSProperties}
+              onDragOver={(event) => {
+                event.preventDefault();
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+
+                const tileId = draggedTileId || event.dataTransfer.getData("text/plain");
+
+                if (!tileId) {
+                  setNavigatorText("ჯერ აირჩიეთ ან გადაასრიალეთ კენჭი.");
+                  return;
+                }
+
+                if (winner) {
+                  setNavigatorText("თამაში უკვე დასრულებულია.");
+                  setDraggedTileId(null);
+                  return;
+                }
+
+                if (isAiThinking) {
+                  setNavigatorText("ახლა თქვენი სვლა არ არის. დაელოდეთ სხვა მოთამაშეს.");
+                  setDraggedTileId(null);
+                  return;
+                }
+
+                if (board.length === 0) {
+                  setNavigatorText("პირველი სვლა მხოლოდ „სვლა“ კენჭით შეიძლება.");
+                  setDraggedTileId(null);
+                  return;
+                }
+
+                const rect = event.currentTarget.getBoundingClientRect();
+                const dropX = ((event.clientX - rect.left) / rect.width) * 100;
+                const dropY = ((event.clientY - rect.top) / rect.height) * 100;
+
+                let nearest = board[0];
+                let nearestDistance = Number.POSITIVE_INFINITY;
+
+                board.forEach((node) => {
+                  const dx = dropX - node.x;
+                  const dy = dropY - node.y;
+                  const distance = Math.sqrt(dx * dx + dy * dy);
+
+                  if (distance < nearestDistance) {
+                    nearest = node;
+                    nearestDistance = distance;
+                  }
+                });
+
+                if (!nearest || nearestDistance > 28) {
+                  setNavigatorText("კენჭი უნდა მიადოთ უკვე დადებულ კენჭს.");
+                  setDraggedTileId(null);
+                  return;
+                }
+
+                const dx = dropX - nearest.x;
+                const dy = dropY - nearest.y;
+
+                const autoSide: AttachSide =
+                  Math.abs(dx) >= Math.abs(dy)
+                    ? dx >= 0
+                      ? "right"
+                      : "left"
+                    : dy >= 0
+                      ? "bottom"
+                      : "top";
+
+                const rawPos = getPositionBySide(nearest, autoSide, board.length);
+
+                if (isColliding(rawPos.x, rawPos.y, board)) {
+                  setNavigatorText("ეს ადგილი დაკავებულია. აირჩიეთ სხვა მხარე.");
+                  setDraggedTileId(null);
+                  return;
+                }
+
+                setSelectedAnchorId(nearest.id);
+                playTileOnAnchor(nearest, tileId, autoSide);
+              }}
             >
               <svg className="dominoLinks" aria-hidden="true">
                 {board
@@ -1269,8 +1348,9 @@ export default function RoomPage() {
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
                     event.preventDefault();
+                    event.stopPropagation();
                     const tileId = draggedTileId || event.dataTransfer.getData("text/plain");
-                    playTileOnAnchor(tile, tileId);
+                    playTileOnAnchor(tile, tileId, selectedSide);
                   }}
                 >
                   <div

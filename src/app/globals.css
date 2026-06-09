@@ -6093,6 +6093,62 @@ html {
   }
 }
 
+/* Drag/Drop Visual Feedback */
+.draggingHandTile {
+  opacity: 0.5;
+}
+
+.dragOverAnchorTile .boardPlacedSameTile {
+  box-shadow: 0 0 0 3px rgba(15, 143, 137, 0.6), 0 0 12px rgba(15, 143, 137, 0.4);
+  transform: scale(1.05);
+}
+
+.dragPreviewOverlay {
+  position: fixed;
+  z-index: 999;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.dragPreviewTile {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 16px;
+  box-shadow: 0 8px 24px rgba(16, 32, 51, 0.3), 0 0 0 2px rgba(15, 143, 137, 0.6);
+  opacity: 0.95;
+}
+
+.dragPreviewTile b {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.dragPreviewTile span {
+  font-size: 9px;
+  font-weight: 800;
+  margin-top: 2px;
+}
+
+.dragHintText {
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(16, 32, 51, 0.9);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* Victory and Assessment Modals */
 .v8ModalOverlay {
   position: fixed;

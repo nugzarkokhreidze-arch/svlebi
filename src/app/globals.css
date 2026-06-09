@@ -6558,3 +6558,93 @@ html {
 .observerActionButton:hover {
   transform: translateY(-1px);
 }
+/* Setup invite link block */
+
+.inviteLinkBox {
+  text-align: left;
+}
+
+.inviteLinkHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.inviteLinkHeader strong {
+  display: block;
+  color: #0f3f3b;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.inviteLinkHeader p {
+  margin: 0;
+  color: #52706b;
+  line-height: 1.45;
+  font-size: 14px;
+}
+
+.smallInviteButton {
+  border: 1px solid rgba(20, 129, 119, 0.22);
+  background: #ffffff;
+  color: #0d7e75;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.inviteLinkRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.inviteLinkInput {
+  width: 100%;
+  border: 1px solid rgba(20, 129, 119, 0.2);
+  border-radius: 18px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #123330;
+  font-weight: 800;
+  outline: none;
+}
+
+.copyInviteButton {
+  border: 0;
+  border-radius: 18px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #118c83, #0f9f92);
+  color: white;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 12px 24px rgba(17, 140, 131, 0.18);
+  white-space: nowrap;
+}
+
+.inviteHint {
+  margin: 10px 0 0;
+  color: #52706b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (max-width: 720px) {
+  .inviteLinkHeader {
+    flex-direction: column;
+  }
+
+  .inviteLinkRow {
+    grid-template-columns: 1fr;
+  }
+
+  .smallInviteButton,
+  .copyInviteButton {
+    width: 100%;
+  }
+}

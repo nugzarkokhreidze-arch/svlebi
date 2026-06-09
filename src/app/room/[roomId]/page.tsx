@@ -68,6 +68,21 @@ type GameSetup = {
   market: GameTile[];
 };
 
+type ChatIntent = "agreement" | "refusal" | "joke" | "challenge" | "negotiation" | "question" | "alliance" | "threat" | "neutral";
+
+type VictoryInfo = {
+  type: "individual" | "alliance" | "leader";
+  winners: string[];
+  winnerIds: string[];
+  reason: string;
+};
+
+type AllianceInfo = {
+  player1Id: string;
+  player2Id: string;
+  sharedRedTiles: number;
+};
+
 const AI_MOVE_DELAY = 7000;
 
 const avatarMap: Record<string, string> = {
@@ -374,6 +389,247 @@ function getNavigatorTextForBoardTile(tile: PlayedTile): string {
   return boardInfo;
 }
 
+function detectChatIntent(text: string): ChatIntent {
+  const lower = text.toLowerCase();
+
+  // Simple keyword-based intent detection
+  if (lower.includes("დათანხმ") || lower.includes("კარგი") || lower.includes("შეთანხმ") || lower.includes("კი") || lower.includes("დადასტურ")) return "agreement";
+  if (lower.includes("არა") || lower.includes("ვერ") || lower.includes("უარი") || lower.includes("მოხდა") || lower.includes("შეუძლებელი")) return "refusal";
+  if (lower.includes("ჰა") || lower.includes("თამამი") || lower.includes("სასაცილო") || lower.includes("თეატრ")) return "joke";
+  if (lower.includes("ვილოცე") || lower.includes("ხელი") || lower.includes("თავი") || lower.includes("აბა") || lower.includes("ნახე")) return "challenge";
+  if (lower.includes("ფასი") || lower.includes("პირობა") || lower.includes("სადაც") || lower.includes("მოლაპარაკ")) return "negotiation";
+  if (lower.includes("?") || lower.includes("რა") || lower.includes("როგორ") || lower.includes("რომელი")) return "question";
+  if (lower.includes("ალიანსი") || lower.includes("თანამშრომლ") || lower.includes("ერთად") || lower.includes("ხელთ")) return "alliance";
+  if (lower.includes("შენს") || lower.includes("დაგ") || lower.includes("დამარცხ") || lower.includes("დაკარგ")) return "threat";
+
+  return "neutral";
+}
+
+function generateAiChatReply(aiId: string, senderName: string, text: string, mode: ChatMode): string {
+  const behavior = getAiBehaviorProfile(aiId);
+  const intent = detectChatIntent(text);
+
+  // AI personality-based responses
+  const replies: Record<string, Record<ChatIntent, string[]>> = {
+    diplomat: {
+      agreement: ["კარგი, ამ ეტაპზე შემიძლია დაგეთანხმო.", "შეთანხმება მისაღებია, მაგრამ ვნახოთ რა ფასი ექნება.", "ეთანხმები, დააკვირდი ჩემს შემდეგ სვლას."],
+      refusal: ["ამაზე ვერ დაგთანხმდები.", "ჯერ არა. შენი პოზიცია საკმარისად დამაჯერებელი არ არის.", "დღეს რა ვთქვა, ხვალ შეიძლება იცვლებოდეს."],
+      joke: ["ჰმ, რა თქმა უნდა.", "უმორო მოთამაშე ხარ.", "კარგი, ვცდი შენი იუმორი."],
+      challenge: ["აბა, ახლა ვნახოთ რა გაქვს.", "ეს კარგი რეაქცია იქნება.", "თანამედროვე სვლა გაქ."],
+      negotiation: ["შეგვიძლია მოვილაპარაკოთ, მაგრამ პირობები უნდა შეიცვალოს.", "თუ პირობებს დაზუსტებ, შეიძლება შეთანხმებაც შედგეს.", "რა პირობებზე ფიქრობ?"],
+      question: ["კარგი კითხვა.", "სიმართლე, სიმართლე.", "ეს დამოკიდებული მოთამაშის სვლაზეა."],
+      alliance: ["პოლიტიკური ალიანსი საინტერესოა.", "ერთად ვიქნებოდით უფრო ძლიერი.", "ამის შესახებ გაფიქრდები."],
+      threat: ["არ მე არ შიგეშინდი.", "დაკაა თქვენი სვლა.", "ხომ ხელი არ გაუშე?"],
+      neutral: ["ჯერ ვხედავ.", "მოდი, ვითამაშოთ.", "სიტუაცია იცვლება."],
+    },
+    aggressive: {
+      agreement: ["კარგი, დაგთანხმდი, მაგრამ ადვილი არ იქნება.", "გეთანხმები, თუმცა მოემზადე."],
+      refusal: ["წავიდე, ეს დიდი სიცრუეა.", "ამაზე აბსოლუტურად ვერ!", "შენი ყალბი პროპოზიცია წავეთ."],
+      joke: ["სასაცილო, მაგრამ გამხდელი ხარ.", "ეს დაპალეს ხარ."],
+      challenge: ["აბა, ახლა ვნახოთ როგორ უპასუხებ.", "შენგან უფრო მკაცრ სვლას ველოდი.", "აქ კი სამართლო ხარ."],
+      negotiation: ["ფასი ძალიან მაღალი.", "უფრო კომპრომისი უნდა.", "ეს გარიგება ცხელი არ არის."],
+      question: ["რატომ გჯერა, რომ ეს მნიშვნელოვანია?", "უფრო აზრი რაც მაინტერესებს.", "კითხვა ნორმალური კითხვაა."],
+      alliance: ["ალიანსი? პირდაპირი არ უნდა.", "მე დამოუკიდებელი მოთამაშე ვარ."],
+      threat: ["არ შემეშინდა.", "ხელი კიდევ დაგიტყებ.", "შენი მუქი სიტყვები დამახსენა არაფერი."],
+      neutral: ["უაზროდ ლაპარაკი.", "რა ძველი ხიბლი.", "დაე დაიწყოს რეალური თამაში."],
+    },
+    resource: {
+      agreement: ["კარგი, მაშინ რა პირობებზე ვერთხევთ?", "დაგთანხმდი, თუ რესურსი დაერთვება.", "ფასი კარგი, თუ მეტი ღირს."],
+      refusal: ["ფასი არ თხეულობს.", "რესურსი ზღვარში არის.", "მეტი რესურსი დამე დაე დაიწყოთ."],
+      joke: ["სასაცილო, მაგრამ ფასი აქვს.", "ჰაი მე მხოლოდ რეალური თამაში აღარ ვხვდი."],
+      challenge: ["აბა, ვნახოთ რა ღირი შენი თამაში.", "თავაზი სამაგიერო ფასი მოითხოვს.", "თუ ეს სვლა ღირი ხო, მე უფრო კარგი სვლა მაქვს."],
+      negotiation: ["რესურსის გაცვლა აუცილებელი იქნებ.", "თუ თანხა დაამატებ, ეთანხმები.", "რა რეალური ღირებულება აქვს შენი წინადადებას?"],
+      question: ["რა ღირი შენი კითხვის პასუხი?", "პასუხი მხოლოდ რესურსით შეიძლება.", "კითხვა კარგი, მაგრამ ფასი აქვს."],
+      alliance: ["ალიანსი, თუ რესურსი გაიზიარებთ.", "ერთად ვიქნებოდით, თუ მოგება იქნება."],
+      threat: ["შენი დაკვრა ბაზარია, მე რეალური რეალობა ცნობ.", "დაკვრა არაფერი ღირს რეალური რესურსის გარეშე.", "თავი უთავო, ფასი გაკეთებ."],
+      neutral: ["რა დღე ხა, რა ფასი ხა.", "ყველა რესურსი ღირს.", "ბაზარი საუკეთესო წესიერი."],
+    },
+    opportunist: {
+      agreement: ["კარგი, ეს ხელი მე აქვს.", "გეთანხმები, ეს წინ უნდა დაგაძ."],
+      refusal: ["არა, ამაზე დაპატივებული ვარ.", "მე უფრო უკეთესი წინილი გამოკვეთეთ."],
+      joke: ["სასაცილო კი, მაგრამ შენი მხარე სუსტი.", "ჰა, თუ ეს დაფუძნებული იყო..."],
+      challenge: ["აბა, ვნახოთ კიდეც რომელი მხარე უფრო ძლიერი.", "შენ მხარე სუსტი, ჩემი უფრო მკაცრი.", "აზრი ხე მედე კარგი."],
+      negotiation: ["მე უფრო ძლიერი მხარე დავაკითხე.", "თუ გამარჯვებული მხარე ავირჩე, ეთანხმები.", "თუ დასტურს გავაკე, ხელი კი ამოუშვები."],
+      question: ["კითხვა კარგი, მაგრამ ჩემი მხარე უფრო დაკმაყოფილებელი.", "რა ჯერ უნდა აირჩი? უფრო ძლიერი."],
+      alliance: ["ალიანსი, თუ აბსოლუტურად გამარჯვებული მხარე აირჩი.", "ერთად, თუ მე ვმეთობებ."],
+      threat: ["შენი დაკვრა აბას ვერ აკავებს მე.", "დაკვრა დაკვრა, თუმცა მე უფრო კარგი კარტი ავს."],
+      neutral: ["ვთხოვ ასპე, ხელი აკითხე.", "მე ჩემი ხელი კი ასწორებ.", "რა დღე, მე კიდეც უფრო კარგი კარტი მაქვს"],
+    },
+    leader: {
+      agreement: ["კარგი, ეს მოთამაშე გავაკე.", "გეთანხმები, ეს სტრატეგიული."],
+      refusal: ["ამაზე არა. ლიდერობა ჯერ კიდე დაუთავარებელი.", "ამ საფეხურზე აბა ამ სვლას."],
+      joke: ["სასაცილო, მაგრამ გამომაკოთხო კი.", "რა ხუმრობა, ჯერ ლიდერობა მე.", "თუმცა კიდეც ბეჰემდე დაიდე ჩემი ხელი ზე დაგვეხეთ."],
+      challenge: ["აბა, ვნახოთ გეემთხვევა ლიდერის პოზიცია.", "შენი სვლა რა კარგი, თუმცა ლიდერობა სხვა საქმეა.", "ეს ლიდერული სვლა კი, მაგრამ ბოლოს ჩემი გამარჯვება."],
+      negotiation: ["ლიდერობას სტრატეგიული პირობა სჭირდება.", "თუ მე ლიდერი ხოდი, მოდი ერთად.", "სტრატეგია სტრატეგია, მე დირექტივა ვაძლევ."],
+      question: ["ეს კარგი კითხვა, მაგრამ ლიდერი ვიცი პასუხი.", "თუ ლიდერი ხო, გეტყვი პასუხი.", "კითხვა კარგი, თუმცა სხვა ხედვა უნდა."],
+      alliance: ["ალიანსი, თუ ლიდერობის კოალიციაში შედი.", "ერთად, მაგრამ ლიდერობა ჩემი."],
+      threat: ["შენი დაკვრა სულ რა, ჩემი ლიდერობა.", "დაკვრა აბა, მე ლიდერი ხო.", "ხელი შენი თუ კი, ლიდერობა ჩემი დარჩება."],
+      neutral: ["ლიდერობა სტრატეგია.", "ჯერ დავფიქრდები თუ რა მხარე უფრო ლიდერული.", "სტრატეგიული კი, მაგრამ სხვა დათვლა აკ."],
+    },
+  };
+
+  const aiReplies = replies[behavior] || replies.diplomat;
+  const intentReplies = aiReplies[intent] || aiReplies.neutral;
+  return intentReplies[Math.floor(Math.random() * intentReplies.length)];
+}
+
+function countAllianceTiles(board: PlayedTile[], player1Id: string, player2Id: string): number {
+  const allianceTiles = ["agreement", "partnership", "loyalty", "alliance", "friendship", "consensus"];
+  let count = 0;
+
+  board.forEach((tile) => {
+    if (
+      allianceTiles.includes(tile.baseId) &&
+      ((tile.playedById === player1Id && tile.targetId === player2Id) ||
+        (tile.playedById === player2Id && tile.targetId === player1Id))
+    ) {
+      count++;
+    }
+  });
+
+  return count;
+}
+
+function checkVictoryConditions(
+  currentBoard: PlayedTile[],
+  hand: GameTile[],
+  aiHands: Record<string, GameTile[]>,
+  players: Player[],
+  leaderId: string | null,
+  leaderSinceTurn: number,
+  currentTurn: number
+): VictoryInfo | null {
+  // 1. Individual win - someone has no tiles left
+  if (hand.length === 0) {
+    const humanPlayer = players.find((p) => p.id === "human");
+    if (humanPlayer) {
+      return {
+        type: "individual",
+        winners: [humanPlayer.name],
+        winnerIds: ["human"],
+        reason: `${humanPlayer.name} პირველმა დაცალა ყველა კენჭი.`,
+      };
+    }
+  }
+
+  aiPlayersBase.forEach((aiPlayer) => {
+    if ((aiHands[aiPlayer.id]?.length || 0) === 0) {
+      const aiPlayerObj = players.find((p) => p.id === aiPlayer.id);
+      if (aiPlayerObj) {
+        return {
+          type: "individual",
+          winners: [aiPlayerObj.name],
+          winnerIds: [aiPlayer.id],
+          reason: `${aiPlayerObj.name} პირველმა დაცალა ყველა კენჭი.`,
+        };
+      }
+    }
+  });
+
+  // 2. Leader victory - leader maintains position for 5 turns
+  if (leaderId && currentTurn - leaderSinceTurn >= 5) {
+    const leader = players.find((p) => p.id === leaderId);
+    if (leader) {
+      return {
+        type: "leader",
+        winners: [leader.name],
+        winnerIds: [leaderId],
+        reason: `${leader.name} ლიდერად რჩება და ხელისუფლება დამკვიდრებულია.`,
+      };
+    }
+  }
+
+  // 3. Alliance victory - two players with 3+ shared red tiles, one has 2 or fewer tiles
+  const playerIds = ["human", ...aiPlayersBase.map((p) => p.id)];
+  for (let i = 0; i < playerIds.length; i++) {
+    for (let j = i + 1; j < playerIds.length; j++) {
+      const p1Id = playerIds[i];
+      const p2Id = playerIds[j];
+      const sharedTiles = countAllianceTiles(currentBoard, p1Id, p2Id);
+
+      if (sharedTiles >= 3) {
+        const p1Hand = p1Id === "human" ? hand : aiHands[p1Id];
+        const p2Hand = aiHands[p2Id];
+
+        if ((p1Hand?.length || 0) <= 2 || (p2Hand?.length || 0) <= 2) {
+          const p1 = players.find((p) => p.id === p1Id);
+          const p2 = players.find((p) => p.id === p2Id);
+          if (p1 && p2) {
+            return {
+              type: "alliance",
+              winners: [p1.name, p2.name],
+              winnerIds: [p1Id, p2Id],
+              reason: `${p1.name} და ${p2.name} ალიანსი ჩამოიყალიბა და გაიმარჯვეს.`,
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function generatePlayerAssessment(board: PlayedTile[], hand: GameTile[], humanName: string): string {
+  const redTiles = board.filter((t) => t.color === "red" && t.playedById === "human").length;
+  const blackTiles = board.filter((t) => t.color === "black" && t.playedById === "human").length;
+  const yellowTiles = board.filter((t) => t.color === "yellow" && t.playedById === "human").length;
+  const totalMoves = redTiles + blackTiles + yellowTiles;
+
+  const allianceMoves = board.filter(
+    (t) =>
+      t.playedById === "human" &&
+      ["agreement", "partnership", "loyalty", "alliance", "friendship", "consensus"].includes(t.baseId)
+  ).length;
+
+  const aggressiveMoves = board.filter(
+    (t) =>
+      t.playedById === "human" &&
+      ["surveillance", "manipulation", "falsification", "bribery", "attack", "neutralize"].includes(t.baseId)
+  ).length;
+
+  const assessment = `თამაშის შეფასება — ${humanName}
+
+** საერთო შეფასება **
+თქვენი თამაში გამოჩნდა ${totalMoves} მნიშვნელოვანი ნაბიჯით. ${
+    redTiles > blackTiles ? "დიპლომატიური მიდგომა" : "უფრო აგრესიული სტილი"
+  } აღმოჩნდა. სულ ხელში დაგრჩა ${hand.length} კენჭი.
+
+** სტრატეგიული ხედვა **
+კრიტიკული მომენტებში ${totalMoves > 8 ? "აქტიური" : "დაფიქრებული"} ხართ ხელი.
+წითელი კენჭების გამოყენება (${redTiles}): სამშვიდობო პოლიტიკა.
+შავი კენჭების გამოყენება (${blackTiles}): ${blackTiles > 3 ? "მკაცრი დაკვრა" : "ნელი მიდგომა"}.
+ყვითალი კენჭების გამოყენება (${yellowTiles}): რესურსული მნიშვნელობა.
+
+** პოლიტიკური ეთიკა და წესიერება **
+ალიანსის მცდელობა: ${allianceMoves > 2 ? "კარგი თანამშრომლობის ბაზა" : "უფრო დამოუკიდებელი თამაში"}.
+აგრესიული მოქმედება: ${aggressiveMoves > 3 ? "აქტიური პოლიტიკა" : "სამშვიდობო პოზიცია"}.
+
+** მოლაპარაკების უნარი **
+რესურსი და შეთანხმებები: ${yellowTiles > 2 ? "ხელშემკჭობილი" : "საჭიროა განვითარება"}.
+პირობების წაყენება: ${totalMoves > 5 ? "თამაში აცნობიერებული" : "უფრო რეაქტიული მოთამაშე"}.
+
+** რისკი და ავანტიურა **
+ბანკის რისკი: ${aggressiveMoves > totalMoves / 2 ? "მაღალი რისკი" : "სწრთე მიდგომა"}.
+ახალი სტრატეგია: ${totalMoves < 5 ? "საჭიროა მეტი ნაბიჯი" : "მკაფიოდ განვითარებული პლან"}.
+
+** ალიანსები და ურთიერთობები **
+გაკე პარტნიორი მოთამაშე: ${allianceMoves > 0 ? "კარგი თანამშრომლობა" : "მოკაა მონაწილეობა"}.
+ურთიერთობების მანიპულირება: ${aggressiveMoves > 5 ? "აქტიური საწინააღმდეგო მოქმედება" : "კოორდინაციული სტილი"}.
+
+** რესურსების გამოყენება **
+ფიქსირებული რესურსი: ${yellowTiles > 0 ? "მიზანმიმართული ხარჯი" : "გამოუყენებელი კაპიტალი"}.
+
+** გაუმჯობესების რჩევები **
+1. მეტი ყურადღება მიაქციეთ ალიანსების დროულ შექმნას - ეს გახდება ხელი.
+2. არ გამოიყენოთ აგრესიული კენჭები ზედმეტად ადრე - დაეკვიდრეთ ფიქსირებული პოზიცია.
+3. რესურსული კენჭები გამოიყენეთ მაშინ, როცა მოლაპარაკებას ფასი სჭირდება.
+4. სცადეთ სხვადასხვა მოთამაშესთან ბალანსირებული ურთიერთობა.
+5. ლიდერობისკენ სვლა დაგეგმეთ არა ერთჯერადი, არამედ რამდენიმე ნაბიჯიანი სტრატეგიით.`;
+
+  return assessment;
+}
+
 export default function RoomPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -429,6 +685,14 @@ export default function RoomPage() {
     "სისტემამ დადო საწყისი კენჭი „სვლა“.",
     "თამაში დაიწყო. ყველა მოთამაშემ მიიღო 6 კენჭი.",
   ]);
+
+  const [leaderId, setLeaderId] = useState<string | null>(null);
+  const [leaderSinceTurn, setLeaderSinceTurn] = useState<number>(0);
+  const [gameEnded, setGameEnded] = useState(false);
+  const [victoryInfo, setVictoryInfo] = useState<VictoryInfo | null>(null);
+  const [showVictoryModal, setShowVictoryModal] = useState(false);
+  const [showAssessmentModal, setShowAssessmentModal] = useState(false);
+  const [turnCounter, setTurnCounter] = useState(0);
 
   const players: Player[] = useMemo(
     () => [
@@ -656,10 +920,24 @@ export default function RoomPage() {
 
     playSound("tile");
 
+    // Track leader (L tiles)
+    if (tileToPlay!.symbol === "L") {
+      setLeaderId("human");
+      setLeaderSinceTurn(board.length);
+    }
+
     if (remainingHand.length === 0) {
       setWinner(playerName);
       setLog((previous) => [`თამაში დასრულდა — ${playerName}-მა პირველმა დაცალა კენჭები.`, ...previous]);
       setNavigatorText("გილოცავ! შენ პირველმა დაცალე კენჭები.");
+      setVictoryInfo({
+        type: "individual",
+        winners: [playerName],
+        winnerIds: ["human"],
+        reason: `${playerName} პირველმა დაცალა ყველა კენჭი.`,
+      });
+      setGameEnded(true);
+      setShowVictoryModal(true);
       setIsAiThinking(false);
       setCurrentTurnId("human");
       return;
@@ -799,6 +1077,7 @@ export default function RoomPage() {
 
     const target = players.find((player) => player.id === privateTarget);
 
+    // Add human message
     setChatMessages((previous) => [
       {
         id: makeId("chat-human"),
@@ -808,19 +1087,48 @@ export default function RoomPage() {
         mode: chatMode,
         to: chatMode === "private" ? target?.name : undefined,
       },
-      {
-        id: makeId("chat-ai"),
-        author: chatMode === "private" ? target?.name || "AI" : "ნინო AI",
-        text: chatMode === "private" ? "პირადი შეტყობინება მივიღე." : "შეტყობინება მივიღე.",
-        type: "ai",
-        mode: chatMode,
-        to: chatMode === "private" ? playerName : undefined,
-      },
       ...previous,
     ]);
 
     setChatInput("");
     playSound("chat");
+
+    // Generate AI response after a short delay
+    const delayMs = 1500 + Math.random() * 1500; // 1.5-3 seconds
+
+    setTimeout(() => {
+      if (chatMode === "private" && target && target.type === "ai") {
+        // Private message - responding AI player replies
+        const aiReply = generateAiChatReply(target.id, playerName, text, chatMode);
+
+        setChatMessages((previous) => [
+          {
+            id: makeId("chat-ai"),
+            author: target.name,
+            text: aiReply,
+            type: "ai",
+            mode: chatMode,
+            to: playerName,
+          },
+          ...previous,
+        ]);
+      } else if (chatMode === "public") {
+        // Public message - one or more AI players respond
+        const respondingAi = aiPlayersBase[Math.floor(Math.random() * aiPlayersBase.length)];
+        const aiReply = generateAiChatReply(respondingAi.id, playerName, text, chatMode);
+
+        setChatMessages((previous) => [
+          {
+            id: makeId("chat-ai"),
+            author: respondingAi.name,
+            text: aiReply,
+            type: "ai",
+            mode: chatMode,
+          },
+          ...previous,
+        ]);
+      }
+    }, delayMs);
   }
 
   const visibleChatMessages = chatMessages.filter((message) => message.mode === chatMode);
@@ -1154,6 +1462,109 @@ export default function RoomPage() {
           </div>
         </aside>
       </section>
+
+      {/* Victory Modal */}
+      {showVictoryModal && victoryInfo && (
+        <div className="modalOverlay v8ModalOverlay" onClick={() => setShowVictoryModal(false)}>
+          <div className="modalContent v8ModalContent" onClick={(e) => e.stopPropagation()}>
+            <h2 className="v8ModalTitle">
+              {victoryInfo.winnerIds.includes("human") ? "თქვენ გაიმარჯვეთ!" : "ამ ეტაპზე თქვენ დამარცხდით"}
+            </h2>
+
+            <div className="v8ModalBody">
+              <p className="v8ModalWinnerType">
+                გამარჯვების ტიპი: {victoryInfo.type === "individual" ? "ინდივიდუალური" : victoryInfo.type === "alliance" ? "ალიანსი" : "ლიდერი"}
+              </p>
+
+              <p className="v8ModalWinners">
+                გამარჯვებული: {victoryInfo.winners.join(", ")}
+              </p>
+
+              <p className="v8ModalReason">{victoryInfo.reason}</p>
+
+              {victoryInfo.winnerIds.includes("human") ? (
+                <p className="v8ModalMessage">გილოცავთ! თქვენმა სტრატეგიამ ამ ეტაპზე იმუშავა.</p>
+              ) : (
+                <p className="v8ModalMessage">თუმცა უკვე გამოცდილება მიიღეთ და შემდეგ თამაშში უკეთეს სტრატეგიას ააწყობთ.</p>
+              )}
+            </div>
+
+            <div className="v8ModalButtons">
+              <button
+                className="v8ModalButton"
+                onClick={() => {
+                  setShowVictoryModal(false);
+                  if (victoryInfo.winnerIds.includes("human")) {
+                    setShowAssessmentModal(true);
+                  }
+                }}
+              >
+                თამაშის შეფასება
+              </button>
+              <button
+                className="v8ModalButton v8ModalSecondary"
+                onClick={() => {
+                  setShowVictoryModal(false);
+                  setGameEnded(false);
+                }}
+              >
+                თამაშში ბოლომდე დარჩენა
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assessment Modal */}
+      {showAssessmentModal && (
+        <div className="modalOverlay v8ModalOverlay" onClick={() => setShowAssessmentModal(false)}>
+          <div className="modalContent v8ModalContent v8AssessmentModal" onClick={(e) => e.stopPropagation()}>
+            <h2 className="v8ModalTitle">თამაშის შეფასება</h2>
+
+            <div className="v8AssessmentContent">
+              <pre className="v8AssessmentText">
+                {generatePlayerAssessment(board, hand, playerName)}
+              </pre>
+            </div>
+
+            <div className="v8ModalButtons">
+              <button
+                className="v8ModalButton"
+                onClick={() => {
+                  const printWindow = window.open("", "_blank");
+                  if (printWindow) {
+                    printWindow.document.write(
+                      `<pre style="font-family: Courier, monospace; padding: 20px;">${generatePlayerAssessment(board, hand, playerName).replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`
+                    );
+                    printWindow.document.close();
+                    printWindow.print();
+                  }
+                }}
+              >
+                შეფასების ჩამოწერა
+              </button>
+              <button
+                className="v8ModalButton v8ModalSecondary"
+                onClick={() => {
+                  setShowAssessmentModal(false);
+                  window.location.href = "/";
+                }}
+              >
+                მთავარ გვერდზე დაბრუნება
+              </button>
+              <button
+                className="v8ModalButton v8ModalSecondary"
+                onClick={() => {
+                  setShowAssessmentModal(false);
+                  window.location.href = "/setup";
+                }}
+              >
+                ახალი თამაში
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

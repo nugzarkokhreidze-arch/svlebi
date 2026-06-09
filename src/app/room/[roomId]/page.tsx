@@ -1055,6 +1055,7 @@ const [humanObserverMode, setHumanObserverMode] = useState(false);
 const [turnCounter, setTurnCounter] = useState(0);
   const [sharedHydrated, setSharedHydrated] = useState(mode !== "group");
   const lastSharedStateRef = useRef("");
+  const canWriteSharedStateRef = useRef(mode !== "group");
 
   useEffect(() => {
     if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
@@ -1103,6 +1104,12 @@ const [turnCounter, setTurnCounter] = useState(0);
       supabase!.removeChannel(channel);
     };
   }, [mode, roomId]);
+
+  function markSharedLocalChange() {
+    if (mode === "group") {
+      canWriteSharedStateRef.current = true;
+    }
+  }
 
   function buildSharedStateSnapshot(): SharedRoomState {
     return {
@@ -1179,6 +1186,7 @@ const [turnCounter, setTurnCounter] = useState(0);
 
       if (state) {
         lastSharedStateRef.current = JSON.stringify(state);
+        canWriteSharedStateRef.current = false;
         applySharedState(state);
       } else if (localSeatId === "human") {
         const initialState = buildSharedStateSnapshot();
@@ -1221,6 +1229,7 @@ const [turnCounter, setTurnCounter] = useState(0);
           if (serialized === lastSharedStateRef.current) return;
 
           lastSharedStateRef.current = serialized;
+          canWriteSharedStateRef.current = false;
           applySharedState(nextState);
           setSharedHydrated(true);
         }
@@ -1235,6 +1244,8 @@ const [turnCounter, setTurnCounter] = useState(0);
 
   useEffect(() => {
     if (mode !== "group" || !sharedHydrated || !isSupabaseConfigured || !supabase) return;
+
+    if (!canWriteSharedStateRef.current) return;
 
     const nextState = buildSharedStateSnapshot();
     const serialized = JSON.stringify(nextState);
@@ -1296,6 +1307,7 @@ const [turnCounter, setTurnCounter] = useState(0);
       if (serialized === lastSharedStateRef.current) return;
 
       lastSharedStateRef.current = serialized;
+      canWriteSharedStateRef.current = false;
       applySharedState(nextState);
     }, 1200);
 
@@ -1510,6 +1522,8 @@ const [turnCounter, setTurnCounter] = useState(0);
       return;
     }
 
+    markSharedLocalChange();
+
     const targetId = chooseTarget(anchor);
     const targetName = getPlayerName(targetId);
 
@@ -1701,6 +1715,7 @@ const [turnCounter, setTurnCounter] = useState(0);
     }, AI_MOVE_DELAY);
   }
 function continueAiGameAsObserver() {
+  markSharedLocalChange();
   setHumanObserverMode(true);
   setShowVictoryModal(false);
   setGameEnded(false);
@@ -1810,6 +1825,8 @@ function continueAiGameAsObserver() {
       setNavigatorText("დაელოდე AI მოთამაშეების სვლას. ბაზრიდან აღება შემდეგ შეგიძლია.");
       return;
     }
+
+    markSharedLocalChange();
 
     const [newTile, ...rest] = marketDeck;
 

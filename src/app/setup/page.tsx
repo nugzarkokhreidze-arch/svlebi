@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
 
 type GameMode = "solo" | "group";
 
@@ -30,6 +31,10 @@ function cleanRoomCode(value: string) {
   return value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
 }
 
+function makeHostPlayerId(roomCode: string) {
+  return `${roomCode}-human`;
+}
+
 export default function SetupPage() {
   const [mode, setMode] = useState<GameMode>("solo");
   const [realPlayers, setRealPlayers] = useState(2);
@@ -38,6 +43,7 @@ export default function SetupPage() {
   const [roomCode, setRoomCode] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [statusText, setStatusText] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -69,16 +75,42 @@ export default function SetupPage() {
     if (mode !== "group" || !roomCode || !baseUrl) return "";
 
     const params = new URLSearchParams({
-      mode: "group",
-      room: roomCode,
       realPlayers: String(realPlayers),
     });
 
-    return `${baseUrl}/setup?${params.toString()}`;
+    return `${baseUrl}/join/${roomCode}?${params.toString()}`;
   }, [baseUrl, mode, realPlayers, roomCode]);
+
+  async function ensureSharedRoom() {
+    if (mode !== "group") return true;
+
+    if (!isSupabaseConfigured || !supabase) {
+      setStatusText("Supabase კავშირი ჯერ არ არის გამართული.");
+      return false;
+    }
+
+    const { error } = await supabase.from("svlebi_rooms").upsert(
+      {
+        room_code: roomCode,
+        real_players: realPlayers,
+        status: "lobby",
+      },
+      { onConflict: "room_code" }
+    );
+
+    if (error) {
+      setStatusText("ოთახის შექმნა ვერ მოხერხდა. გადაამოწმეთ Supabase კავშირი.");
+      return false;
+    }
+
+    return true;
+  }
 
   async function copyInviteLink() {
     if (!inviteLink) return;
+
+    const roomReady = await ensureSharedRoom();
+    if (!roomReady) return;
 
     try {
       await navigator.clipboard.writeText(inviteLink);
@@ -93,15 +125,51 @@ export default function SetupPage() {
     }, 1800);
   }
 
-  function startGame() {
+  async function startGame() {
     const cleanName = nickname.trim() || "მოთამაშე";
     const avatar = avatars.find((item) => item.id === selectedAvatar);
+
+    if (mode === "group") {
+      const roomReady = await ensureSharedRoom();
+      if (!roomReady || !supabase) return;
+
+      const hostPlayerId = makeHostPlayerId(roomCode);
+
+      const { error } = await supabase.from("svlebi_room_players").upsert(
+        {
+          id: hostPlayerId,
+          room_code: roomCode,
+          seat_id: "human",
+          name: cleanName,
+          avatar: avatar?.id || "strategist",
+          is_host: true,
+        },
+        { onConflict: "id" }
+      );
+
+      if (error) {
+        setStatusText("მასპინძლის რეგისტრაცია ვერ მოხერხდა.");
+        return;
+      }
+
+      const params = new URLSearchParams({
+        mode,
+        name: cleanName,
+        avatar: avatar?.id || "strategist",
+        realPlayers: String(realPlayers),
+        seat: "human",
+        playerId: hostPlayerId,
+      });
+
+      window.location.href = `/room/${roomCode}?${params.toString()}`;
+      return;
+    }
 
     const params = new URLSearchParams({
       mode,
       name: cleanName,
       avatar: avatar?.id || "strategist",
-      realPlayers: mode === "solo" ? "1" : String(realPlayers),
+      realPlayers: "1",
     });
 
     window.location.href = `/room/${roomCode}?${params.toString()}`;
@@ -249,8 +317,8 @@ export default function SetupPage() {
               <div>
                 <strong>მეგობრის მოსაწვევი ბმული</strong>
                 <p>
-                  გაუზიარე ეს ბმული მეგობარს. ის შევა ამავე ოთახის კოდით,
-                  აირჩევს საკუთარ სახელს და ავატარს.
+                  გაუზიარე ეს ბმული მეგობარს. ის შევა სახელის და ავატარის
+                  არჩევის გვერდზე და დაიკავებს პირველ თავისუფალ AI ადგილს.
                 </p>
               </div>
 
@@ -281,9 +349,11 @@ export default function SetupPage() {
             </div>
 
             <p className="inviteHint">
-              მეგობარი ბმულზე გადასვლის შემდეგ დააჭერს „თამაშის შექმნა“-ს და
-              შევა იგივე ოთახში: <b>{roomCode}</b>
+              ამ ეტაპზე ბმული ქმნის საერთო ოთახს და ადგილებს. შემდეგ ეტაპზე
+              ამავე ოთახს დავუკავშირებთ საერთო დაფას და სვლების სინქრონიზაციას.
             </p>
+
+            {statusText && <p className="inviteHint">{statusText}</p>}
           </div>
         )}
 

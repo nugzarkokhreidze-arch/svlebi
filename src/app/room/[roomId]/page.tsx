@@ -1056,6 +1056,7 @@ const [turnCounter, setTurnCounter] = useState(0);
   const [sharedHydrated, setSharedHydrated] = useState(mode !== "group");
   const lastSharedStateRef = useRef("");
   const canWriteSharedStateRef = useRef(mode !== "group");
+  const lastLocalChangeAtRef = useRef(0);
 
   useEffect(() => {
     if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
@@ -1108,6 +1109,7 @@ const [turnCounter, setTurnCounter] = useState(0);
   function markSharedLocalChange() {
     if (mode === "group") {
       canWriteSharedStateRef.current = true;
+      lastLocalChangeAtRef.current = Date.now();
     }
   }
 
@@ -1227,6 +1229,7 @@ const [turnCounter, setTurnCounter] = useState(0);
 
           const serialized = JSON.stringify(nextState);
           if (serialized === lastSharedStateRef.current) return;
+          if (Date.now() - lastLocalChangeAtRef.current < 3500) return;
 
           lastSharedStateRef.current = serialized;
           canWriteSharedStateRef.current = false;
@@ -1305,6 +1308,7 @@ const [turnCounter, setTurnCounter] = useState(0);
       const serialized = JSON.stringify(nextState);
 
       if (serialized === lastSharedStateRef.current) return;
+      if (Date.now() - lastLocalChangeAtRef.current < 3500) return;
 
       lastSharedStateRef.current = serialized;
       canWriteSharedStateRef.current = false;
@@ -1357,6 +1361,21 @@ const [turnCounter, setTurnCounter] = useState(0);
     return aiHands[localSeatId] || [];
   }, [aiHands, hand, localSeatId]);
 
+  useEffect(() => {
+    if (currentPlayerHand.length === 0) {
+      if (selectedTileId) setSelectedTileId("");
+      return;
+    }
+
+    const selectedStillExists = currentPlayerHand.some((tile) => tile.id === selectedTileId);
+
+    if (!selectedStillExists) {
+      setSelectedTileId(currentPlayerHand[0].id);
+    }
+  }, [currentPlayerHand, selectedTileId]);
+
+  // sync selected tile with current player hand
+
   const boardScale =
     board.length > 30 ? 0.5 : board.length > 22 ? 0.58 : board.length > 14 ? 0.7 : 0.84;
 
@@ -1393,6 +1412,13 @@ const [turnCounter, setTurnCounter] = useState(0);
   }
 
   function chooseTarget(anchor: PlayedTile) {
+    if (mode === "group") {
+      const nextManualSeat = getNextManualSeat(localSeatId);
+      if (nextManualSeat && nextManualSeat !== localSeatId) {
+        return nextManualSeat;
+      }
+    }
+
     if (anchor.playedById !== "human" && anchor.playedById !== "system") {
       return anchor.playedById;
     }
@@ -1405,7 +1431,7 @@ const [turnCounter, setTurnCounter] = useState(0);
     if (!tile) return "ჯერ უნდა აირჩიო კენჭი.";
     if (humanObserverMode) return "თქვენ უკვე დაასრულეთ თამაში და ახლა დამკვირვებლის რეჟიმში ხართ.";
     if (winner) return "თამაში უკვე დასრულებულია.";
-    if (currentTurnId !== localSeatId) {
+    if (mode !== "group" && currentTurnId !== localSeatId) {
       return "ახლა თქვენი სვლა არ არის. დაელოდეთ თქვენს რიგს.";
     }
     if (isAiThinking) return "დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.";
@@ -2189,7 +2215,13 @@ function continueAiGameAsObserver() {
             </div>
 
             <div className="dragOnlyHint">
-              {currentTurnId !== localSeatId ? "ახლა სხვა მოთამაშის სვლაა..." : isAiThinking ? "AI მოთამაშის სვლა მზადდება..." : "კენჭი დაიდება მხოლოდ გადათრევით."}
+              {mode === "group"
+                ? "კენჭი გადაასრიალეთ საერთო დაფაზე."
+                : currentTurnId !== localSeatId
+                  ? "ახლა სხვა მოთამაშის სვლაა..."
+                  : isAiThinking
+                    ? "AI მოთამაშის სვლა მზადდება..."
+                    : "კენჭი დაიდება მხოლოდ გადათრევით."}
             </div>
           </div>
 
@@ -2204,11 +2236,23 @@ function continueAiGameAsObserver() {
                   <button
                     className={`${tileClass(tile.color)} ${selectedTileId === tile.id ? "selectedRoomTile" : ""}`}
                     key={tile.id}
-                    draggable={!winner && !isAiThinking && !humanObserverMode && currentTurnId === localSeatId}
+                    draggable={
+                      !winner &&
+                      !humanObserverMode &&
+                      (mode === "group"
+                        ? currentPlayerHand.length > 0
+                        : !isAiThinking && currentTurnId === localSeatId)
+                    }
                     onDragStart={(event) => {
-                      if (isAiThinking) {
+                      if (mode !== "group" && isAiThinking) {
                         event.preventDefault();
                         setNavigatorText("დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.");
+                        return;
+                      }
+
+                      if (mode === "group" && currentPlayerHand.length === 0) {
+                        event.preventDefault();
+                        setNavigatorText("ამ მოთამაშეს კენჭები აღარ დარჩა.");
                         return;
                       }
 

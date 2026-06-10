@@ -108,6 +108,7 @@ type SharedRoomState = {
 const SEAT_ORDER = ["human", "ai-1", "ai-2", "ai-3", "ai-4", "ai-5"];
 
 const AI_MOVE_DELAY = 7000;
+const GROUP_AI_MOVE_DELAY = 7000;
 
 const avatarMap: Record<string, string> = {
   strategist: "🧑🏻‍💼",
@@ -1481,7 +1482,7 @@ const [turnCounter, setTurnCounter] = useState(0);
     if (!tile) return "ჯერ უნდა აირჩიო კენჭი.";
     if (humanObserverMode) return "თქვენ უკვე დაასრულეთ თამაში და ახლა დამკვირვებლის რეჟიმში ხართ.";
     if (winner) return "თამაში უკვე დასრულებულია.";
-    if (mode !== "group" && currentTurnId !== localSeatId) {
+    if (currentTurnId !== localSeatId) {
       return "ახლა თქვენი სვლა არ არის. დაელოდეთ თქვენს რიგს.";
     }
     if (isAiThinking) return "დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.";
@@ -1587,6 +1588,131 @@ const [turnCounter, setTurnCounter] = useState(0);
       phrase,
     });
   }
+
+  function runSharedHostAiTurn(aiSeatId: string) {
+    if (mode !== "group" || localSeatId !== "human") return;
+    if (isSeatControlledByRealPlayer(aiSeatId)) return;
+
+    const anchor = board[board.length - 1];
+    const aiHand = aiHands[aiSeatId] || [];
+
+    if (!anchor || aiHand.length === 0) {
+      const nextTurn = getNextManualSeat(aiSeatId);
+
+      setCurrentTurnId(nextTurn);
+      setIsAiThinking(false);
+
+      void saveSharedStateNow({
+        board,
+        hand,
+        aiHands,
+        marketDeck,
+        log: [`${getPlayerName(aiSeatId)}-ს კენჭები აღარ აქვს ან სვლა ვერ გააკეთა.`, ...log],
+        currentTurnId: nextTurn,
+        leaderId,
+        leaderSinceTurn,
+        turnCounter,
+        winner,
+        victoryInfo,
+        gameEnded,
+      });
+
+      return;
+    }
+
+    const tile = pickAiTileFromHands(aiHands, aiSeatId, anchor.color) || aiHand[0];
+
+    const possibleTargets = SEAT_ORDER.filter(
+      (id) => id !== aiSeatId && countPairMoves(board, aiSeatId, id) < 3
+    );
+
+    const targetId =
+      possibleTargets.find((id) => isSeatControlledByRealPlayer(id)) ||
+      possibleTargets[0] ||
+      "human";
+
+    const targetName = getPlayerName(targetId);
+    const side: AttachSide = board.length % 2 === 0 ? "right" : "bottom";
+    const phrase = aiPhrases[board.length % aiPhrases.length];
+
+    const aiMove = buildAiPlayedTile(
+      aiSeatId,
+      targetId,
+      anchor,
+      tile,
+      board,
+      side
+    );
+
+    const boardAfterAi = [...board, aiMove];
+    const aiHandsAfterAi = {
+      ...aiHands,
+      [aiSeatId]: aiHand.filter((item) => item.id !== tile.id),
+    };
+
+    const nextTurn = getNextManualSeat(aiSeatId);
+    const logAfterAi = [
+      `${getPlayerName(aiSeatId)}-მა დადო კენჭი „${aiMove.name}“ მოთამაშის მიმართ: ${targetName}.`,
+      ...log,
+    ];
+
+    markSharedLocalChange();
+
+    setBoard(boardAfterAi);
+    setAiHands(aiHandsAfterAi);
+    setLog(logAfterAi);
+    setCurrentTurnId(nextTurn);
+    setIsAiThinking(false);
+    setLastPlacedTileId(aiMove.id);
+    setLastMoveTimestamp(Date.now());
+    setSelectedAnchorId(aiMove.id);
+    setSpotlight(aiSeatId, targetName, aiMove.name, phrase);
+
+    playSound("tile");
+
+    void saveSharedStateNow({
+      board: boardAfterAi,
+      hand,
+      aiHands: aiHandsAfterAi,
+      marketDeck,
+      log: logAfterAi,
+      currentTurnId: nextTurn,
+      leaderId,
+      leaderSinceTurn,
+      turnCounter: turnCounter + 1,
+      winner,
+      victoryInfo,
+      gameEnded,
+    });
+  }
+
+  useEffect(() => {
+    if (mode !== "group") return;
+    if (localSeatId !== "human") return;
+    if (!sharedHydrated) return;
+    if (winner || gameEnded || humanObserverMode) return;
+    if (!currentTurnId) return;
+    if (isSeatControlledByRealPlayer(currentTurnId)) return;
+
+    setIsAiThinking(true);
+
+    const timer = window.setTimeout(() => {
+      runSharedHostAiTurn(currentTurnId);
+    }, GROUP_AI_MOVE_DELAY);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    mode,
+    localSeatId,
+    sharedHydrated,
+    currentTurnId,
+    board,
+    aiHands,
+    roomPlayers,
+    winner,
+    gameEnded,
+    humanObserverMode,
+  ]);
 
   function playTileOnAnchor(anchor: PlayedTile, forcedTileId?: string, forcedSide?: AttachSide) {
     const tileToPlay = currentPlayerHand.find((tile) => tile.id === (forcedTileId || selectedTileId));
@@ -1704,6 +1830,12 @@ const [turnCounter, setTurnCounter] = useState(0);
       setShowVictoryModal(true);
       setIsAiThinking(false);
       setCurrentTurnId("human");
+      return;
+    }
+
+    if (mode === "group") {
+      setCurrentTurnId(targetId);
+      setIsAiThinking(false);
       return;
     }
 
@@ -1877,7 +2009,7 @@ function continueAiGameAsObserver() {
 
     if (!tile) {
       localHands[actor.id] = [];
-      setTimeout(makeNextObserverMove, 700);
+      setTimeout(makeNextObserverMove, GROUP_AI_MOVE_DELAY);
       return;
     }
 
@@ -1916,10 +2048,10 @@ function continueAiGameAsObserver() {
 
     playSound("tile");
 
-    setTimeout(makeNextObserverMove, 1600);
+    setTimeout(makeNextObserverMove, GROUP_AI_MOVE_DELAY);
   };
 
-  setTimeout(makeNextObserverMove, 900);
+  setTimeout(makeNextObserverMove, GROUP_AI_MOVE_DELAY);
 }
   function drawFromMarket() {
     if (humanObserverMode) {
@@ -2356,13 +2488,19 @@ function continueAiGameAsObserver() {
                       !winner &&
                       !humanObserverMode &&
                       (mode === "group"
-                        ? currentPlayerHand.length > 0
+                        ? currentPlayerHand.length > 0 && currentTurnId === localSeatId
                         : !isAiThinking && currentTurnId === localSeatId)
                     }
                     onDragStart={(event) => {
                       if (mode !== "group" && isAiThinking) {
                         event.preventDefault();
                         setNavigatorText("დაელოდე AI მოთამაშეების სვლას. შემდეგ ისევ შენი ჯერი დაბრუნდება.");
+                        return;
+                      }
+
+                      if (mode === "group" && currentTurnId !== localSeatId) {
+                        event.preventDefault();
+                        setNavigatorText("ახლა თქვენი სვლა არ არის. დაელოდეთ თქვენს რიგს.");
                         return;
                       }
 

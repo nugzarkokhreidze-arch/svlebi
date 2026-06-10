@@ -90,6 +90,14 @@ type RoomPlayerRecord = {
   is_host?: boolean;
 };
 
+type RankingRecord = {
+  seatId: string;
+  name: string;
+  playerType: "real" | "ai";
+  place: number;
+  finishedAtTurn: number;
+};
+
 type SharedRoomState = {
   board: PlayedTile[];
   hand: GameTile[];
@@ -103,6 +111,8 @@ type SharedRoomState = {
   winner: string | null;
   victoryInfo: VictoryInfo | null;
   gameEnded: boolean;
+  finishedSeatIds?: string[];
+  rankings?: RankingRecord[];
 };
 
 const SEAT_ORDER = ["human", "ai-1", "ai-2", "ai-3", "ai-4", "ai-5"];

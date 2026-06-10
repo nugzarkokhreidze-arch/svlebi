@@ -1,5 +1,7 @@
 "use client";
 
+const PUBLIC_APP_URL = "https://svlebi.vercel.app";
+
 import { useEffect, useMemo, useState } from "react";
 import { isSupabaseConfigured, supabase } from "../../lib/supabaseClient";
 
@@ -70,7 +72,7 @@ export default function SetupPage() {
     const preparedRoomCode = roomFromUrl ? cleanRoomCode(roomFromUrl) : "";
 
     setRoomCode(preparedRoomCode || createRoomCode());
-    setBaseUrl(window.location.origin);
+    setBaseUrl(PUBLIC_APP_URL);
   }, []);
 
   const aiPlayers = mode === "solo" ? 5 : 6 - realPlayers;

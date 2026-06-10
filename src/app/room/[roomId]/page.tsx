@@ -1050,6 +1050,8 @@ export default function RoomPage() {
   const [leaderSinceTurn, setLeaderSinceTurn] = useState<number>(0);
   const [gameEnded, setGameEnded] = useState(false);
   const [victoryInfo, setVictoryInfo] = useState<VictoryInfo | null>(null);
+
+  const [localVictoryInfo, setLocalVictoryInfo] = useState<VictoryInfo | null>(null);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
 const [showAssessmentModal, setShowAssessmentModal] = useState(false);
 const [humanObserverMode, setHumanObserverMode] = useState(false);

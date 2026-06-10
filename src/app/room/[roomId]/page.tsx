@@ -1058,6 +1058,7 @@ const [turnCounter, setTurnCounter] = useState(0);
   const lastSharedStateRef = useRef("");
   const canWriteSharedStateRef = useRef(mode !== "group");
   const lastLocalChangeAtRef = useRef(0);
+  const finalGamePublishedRef = useRef("");
 
   useEffect(() => {
     if (mode !== "group" || !isSupabaseConfigured || !supabase) return;
@@ -1378,6 +1379,8 @@ const [turnCounter, setTurnCounter] = useState(0);
     ];
   }, [aiHands, avatarId, hand.length, mode, playerName, roomPlayers, seatId]);
 
+  const visibleVictoryInfo = localVictoryInfo || victoryInfo;
+
   const currentPlayerHand = useMemo(() => {
     if (localSeatId === "human") return hand;
     return aiHands[localSeatId] || [];
@@ -1397,6 +1400,121 @@ const [turnCounter, setTurnCounter] = useState(0);
   }, [currentPlayerHand, selectedTileId]);
 
   // sync selected tile with current player hand
+
+  function finalizeGameForAll(
+    winnerSeatId: string,
+    overrides: Partial<SharedRoomState> = {}
+  ) {
+    const finalBoard = overrides.board || board;
+    const finalHand = overrides.hand || hand;
+    const finalAiHands = overrides.aiHands || aiHands;
+    const finalMarketDeck = overrides.marketDeck || marketDeck;
+    const finalTurnCounter =
+      typeof overrides.turnCounter === "number" ? overrides.turnCounter : turnCounter + 1;
+
+    const winnerName = getPlayerName(winnerSeatId);
+    const finalVictoryInfo: VictoryInfo = {
+      type: "individual",
+      winners: [winnerName],
+      winnerIds: [winnerSeatId],
+      reason: `${winnerName} პირველმა დაასრულა ყველა კენჭი.`,
+    };
+
+    const finalLog =
+      overrides.log ||
+      [
+        `თამაში დასრულდა — გაიმარჯვა ${winnerName}-მა.`,
+        ...log,
+      ];
+
+    const publishKey = `${roomId}:${winnerSeatId}:${finalBoard.length}:${finalTurnCounter}`;
+
+    setWinner(winnerName);
+    setVictoryInfo(finalVictoryInfo);
+    setLocalVictoryInfo(finalVictoryInfo);
+    setGameEnded(true);
+    setShowVictoryModal(true);
+    setIsAiThinking(false);
+    setCurrentTurnId(winnerSeatId);
+    setLog(finalLog);
+
+    if (finalGamePublishedRef.current === publishKey) return;
+
+    finalGamePublishedRef.current = publishKey;
+
+    void saveSharedStateNow({
+      board: finalBoard,
+      hand: finalHand,
+      aiHands: finalAiHands,
+      marketDeck: finalMarketDeck,
+      log: finalLog,
+      currentTurnId: winnerSeatId,
+      leaderId,
+      leaderSinceTurn,
+      turnCounter: finalTurnCounter,
+      winner: winnerName,
+      victoryInfo: finalVictoryInfo,
+      gameEnded: true,
+      finishedSeatIds: [winnerSeatId],
+      rankings: [
+        {
+          seatId: winnerSeatId,
+          name: winnerName,
+          playerType: isSeatControlledByRealPlayer(winnerSeatId) ? "real" : "ai",
+          place: 1,
+          finishedAtTurn: finalTurnCounter,
+        },
+      ],
+    });
+  }
+
+  useEffect(() => {
+    if (mode !== "group") return;
+    if (!gameEnded || !victoryInfo) return;
+
+    setShowVictoryModal(true);
+    setIsAiThinking(false);
+  }, [mode, gameEnded, victoryInfo]);
+
+  useEffect(() => {
+    if (mode !== "group") return;
+    if (!sharedHydrated) return;
+    if (gameEnded) return;
+    if (board.length <= 1) return;
+
+    const finishedSeatId = SEAT_ORDER.find((seatIdToCheck) => {
+      if (seatIdToCheck === "human") return hand.length === 0;
+
+      const hasKnownAiHand = Array.isArray(aiHands[seatIdToCheck]);
+      const isKnownRealSeat = Boolean(roomPlayers[seatIdToCheck]);
+
+      if (!hasKnownAiHand && !isKnownRealSeat) return false;
+
+      return (aiHands[seatIdToCheck]?.length || 0) === 0;
+    });
+
+    if (!finishedSeatId) return;
+
+    const finishedSeatIsReal =
+      finishedSeatId === "human" || Boolean(roomPlayers[finishedSeatId]);
+
+    const thisBrowserShouldPublish =
+      finishedSeatId === localSeatId ||
+      (localSeatId === "human" && !finishedSeatIsReal);
+
+    if (!thisBrowserShouldPublish) return;
+
+    finalizeGameForAll(finishedSeatId);
+  }, [
+    mode,
+    sharedHydrated,
+    gameEnded,
+    board,
+    hand.length,
+    aiHands,
+    roomPlayers,
+    localSeatId,
+  ]);
 
   const boardScale =
     board.length > 30 ? 0.5 : board.length > 22 ? 0.58 : board.length > 14 ? 0.7 : 0.84;
@@ -1481,7 +1599,7 @@ const [turnCounter, setTurnCounter] = useState(0);
   function validateMove(tile: GameTile | undefined, anchor: PlayedTile) {
     if (!tile) return "ჯერ უნდა აირჩიო კენჭი.";
     if (humanObserverMode) return "თქვენ უკვე დაასრულეთ თამაში და ახლა დამკვირვებლის რეჟიმში ხართ.";
-    if (winner) return "თამაში უკვე დასრულებულია.";
+    if (gameEnded) return "თამაში უკვე დასრულებულია.";
     if (currentTurnId !== localSeatId) {
       return "ახლა თქვენი სვლა არ არის. დაელოდეთ თქვენს რიგს.";
     }
@@ -1670,6 +1788,21 @@ const [turnCounter, setTurnCounter] = useState(0);
 
     playSound("tile");
 
+    if ((aiHandsAfterAi[aiSeatId] || []).length === 0) {
+      finalizeGameForAll(aiSeatId, {
+        board: boardAfterAi,
+        hand,
+        aiHands: aiHandsAfterAi,
+        marketDeck,
+        log: logAfterAi,
+        currentTurnId: aiSeatId,
+        leaderId,
+        leaderSinceTurn,
+        turnCounter: turnCounter + 1,
+      });
+      return;
+    }
+
     void saveSharedStateNow({
       board: boardAfterAi,
       hand,
@@ -1817,6 +1950,18 @@ const [turnCounter, setTurnCounter] = useState(0);
     });
 
     if (remainingHand.length === 0) {
+      finalizeGameForAll(localSeatId, {
+        board: boardAfterHuman,
+        hand: handAfterHuman,
+        aiHands: aiHandsAfterHuman,
+        marketDeck,
+        log: logAfterHuman,
+        currentTurnId: localSeatId,
+        leaderId: leaderIdAfterHuman,
+        leaderSinceTurn: leaderSinceTurnAfterHuman,
+        turnCounter: turnCounter + 1,
+      });
+      return;
       setWinner(getPlayerName(localSeatId));
       setLog((previous) => [`თამაში დასრულდა — ${getPlayerName(localSeatId)}-მა პირველმა დაცალა კენჭები.`, ...previous]);
       setNavigatorText("გილოცავ! შენ პირველმა დაცალე კენჭები.");
@@ -2644,132 +2789,65 @@ function continueAiGameAsObserver() {
       </section>
 
 {/* Victory Modal */}
-{showVictoryModal && victoryInfo && (
-  <div className="awardModalOverlay" onClick={() => setShowVictoryModal(false)}>
-    <div className="awardModalCard" onClick={(event) => event.stopPropagation()}>
-      <div className="awardGlow" />
+      {showVictoryModal && visibleVictoryInfo && (() => {
+        const winnerSeatId = visibleVictoryInfo.winnerIds[0];
+        const winnerName = visibleVictoryInfo.winners[0] || "მოთამაშე";
+        const localPlayerWon = visibleVictoryInfo.winnerIds.includes(localSeatId);
+        const winnerIsReal = winnerSeatId === "human" || Boolean(roomPlayers[winnerSeatId]);
 
-      <div className="awardHeader">
-        <div className="awardSeal">
-          <div className="awardSealRing">
-            <img src="/svlebi-wheel-logo.png" alt="სვლები" className="awardSealLogo" />
+        return (
+          <div className="awardModalOverlay">
+            <div className="awardModalCard">
+              <div className="awardSeal">
+                <img src="/svlebi-wheel-logo.png" alt="სვლები" className="awardSealLogo" />
+              </div>
+
+              {localPlayerWon && winnerIsReal ? (
+                <>
+                  <p className="awardKicker">გამარჯვების დიპლომი</p>
+                  <h2>გილოცავთ, {winnerName}!</h2>
+                  <p className="awardReason">
+                    თქვენ პირველმა დაასრულეთ ყველა კენჭი და მოიპოვეთ გამარჯვება თამაშში „სვლები“.
+                  </p>
+                  <p className="awardSmallText">
+                    შეგიძლიათ ნახოთ თქვენი პოლიტიკური თამაშის შეფასება ან დაბრუნდეთ მთავარ გვერდზე.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="awardKicker">თამაში დასრულდა</p>
+                  <h2>გაიმარჯვა {winnerName}-მა</h2>
+                  <p className="awardReason">
+                    თქვენ კიდევ შეგიძლიათ სცადოთ. თამაშის გაუმჯობესებისთვის შეგიძლიათ გაეცნოთ თქვენი თამაშის შეფასებას.
+                  </p>
+                </>
+              )}
+
+              <div className="awardActions">
+                <button
+                  className="awardPrimaryButton"
+                  onClick={() => {
+                    setShowAssessmentModal(true);
+                  }}
+                  type="button"
+                >
+                  შეფასების ნახვა
+                </button>
+
+                <button
+                  className="awardSecondaryButton"
+                  onClick={() => {
+                    window.location.href = "/";
+                  }}
+                  type="button"
+                >
+                  მთავარ გვერდზე დაბრუნება
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div className="awardKicker">
-          {victoryInfo.winnerIds.includes("human")
-            ? "სტრატეგიული აღიარება"
-            : "თამაშის პოლიტიკური შედეგი"}
-        </div>
-
-        <h2 className="awardTitle">
-          {victoryInfo.winnerIds.includes("human")
-            ? "სვლების ორდენი"
-            : "პოლიტიკური გამოწვევის ანგარიში"}
-        </h2>
-
-        <p className="awardSubtitle">
-          {victoryInfo.winnerIds.includes("human")
-            ? "თქვენ მოიპოვეთ სტრატეგიული გავლენის ჯილდო"
-            : "ამ რაუნდში უპირატესობა სხვა პოლიტიკურ ძალას დარჩა"}
-        </p>
-      </div>
-
-      <div className="awardRibbon">
-        {victoryInfo.winnerIds.includes("human")
-          ? "გამარჯვებული სტრატეგი"
-          : "შემდეგი სტრატეგიისთვის მზადება"}
-      </div>
-
-      <div className="awardInfoGrid">
-        <div className="awardInfoBox">
-          <span>მოთამაშე</span>
-          <strong>{playerName}</strong>
-        </div>
-
-        <div className="awardInfoBox">
-          <span>სტატუსი</span>
-          <strong>
-            {victoryInfo.winnerIds.includes("human")
-              ? "გამარჯვება"
-              : "დამარცხება"}
-          </strong>
-        </div>
-
-        <div className="awardInfoBox">
-          <span>გამარჯვების ტიპი</span>
-          <strong>
-            {victoryInfo.type === "individual"
-              ? "ინდივიდუალური"
-              : victoryInfo.type === "alliance"
-                ? "ალიანსური"
-                : "ლიდერის"}
-          </strong>
-        </div>
-
-        <div className="awardInfoBox">
-          <span>გამარჯვებული</span>
-          <strong>{victoryInfo.winners.join(", ")}</strong>
-        </div>
-      </div>
-
-      <div className="awardReason">
-        <div className="awardReasonTitle">საბოლოო პოლიტიკური განმარტება</div>
-        <p>{victoryInfo.reason}</p>
-      </div>
-
-      <div className="awardMetrics">
-        <div>
-          <b>გავლენა</b>
-          <span>სტრატეგიული პოზიცია</span>
-        </div>
-        <div>
-          <b>ალიანსები</b>
-          <span>კავშირების მართვა</span>
-        </div>
-        <div>
-          <b>რისკი</b>
-          <span>ტაქტიკური გამბედაობა</span>
-        </div>
-        <div>
-          <b>ლიდერობა</b>
-          <span>პროცესის კონტროლი</span>
-        </div>
-      </div>
-
-      <p className="awardMessage">
-        {victoryInfo.winnerIds.includes("human")
-          ? "გილოცავთ! ამ თამაშში თქვენმა პოლიტიკურმა არჩევანმა, ტაქტიკურმა სვლებმა და გავლენის მართვამ შედეგი გამოიღო."
-          : "ეს შედეგი დამარცხება კი არა, სტრატეგიული გამოცდილებაა. შემდეგ თამაშში შეგიძლიათ უფრო ადრე შექმნათ ალიანსი, გააკონტროლოთ რისკი და უკეთ განსაზღვროთ ლიდერობის მომენტი."}
-      </p>
-
-      <div className="awardActions">
-        <button
-          className="awardPrimaryButton"
-          onClick={() => {
-            setShowVictoryModal(false);
-            if (victoryInfo.winnerIds.includes("human")) {
-              setShowAssessmentModal(true);
-            }
-          }}
-          type="button"
-        >
-          თამაშის შეფასება
-        </button>
-
-<button
-  className="awardGhostButton"
-  onClick={() => {
-    continueAiGameAsObserver();
-  }}
-  type="button"
->
-  თამაშში ბოლომდე დარჩენა
-</button>
-      </div>
-    </div>
-  </div>
-)}
+        );
+      })()}
 
       {/* Assessment Modal */}
       {showAssessmentModal && (

@@ -798,142 +798,296 @@ function generatePlayerAssessment(
 ) {
   const playedTiles = board.filter((tile) => tile.playedById !== "system");
   const myMoves = playedTiles.filter((tile) => tile.playedById === playerIdForAssessment);
-  const movesAgainstMe = playedTiles.filter((tile) => tile.targetId === playerIdForAssessment);
+  const incomingMoves = playedTiles.filter((tile) => tile.targetId === playerIdForAssessment);
 
-  const redMoves = myMoves.filter((tile) => tile.color === "red");
-  const blackMoves = myMoves.filter((tile) => tile.color === "black");
-  const yellowMoves = myMoves.filter((tile) => tile.color === "yellow");
-  const leaderMoves = myMoves.filter((tile) => tile.symbol === "L");
-  const neutralMoves = myMoves.filter((tile) => tile.symbol === "0");
-  const resourceMoves = myMoves.filter((tile) => tile.color === "yellow" || /^[0-9]+$/.test(tile.symbol || ""));
+  const countByColor = (tiles: PlayedTile[], color: TileColor) =>
+    tiles.filter((tile) => tile.color === color).length;
 
-  const redIncoming = movesAgainstMe.filter((tile) => tile.color === "red");
-  const blackIncoming = movesAgainstMe.filter((tile) => tile.color === "black");
-  const yellowIncoming = movesAgainstMe.filter((tile) => tile.color === "yellow");
+  const myRed = countByColor(myMoves, "red");
+  const myBlack = countByColor(myMoves, "black");
+  const myYellow = countByColor(myMoves, "yellow");
 
-  const targetCounts = myMoves.reduce<Record<string, number>>((acc, tile) => {
-    const targetName = tile.targetName || tile.targetId || "უცნობი მოთამაშე";
-    acc[targetName] = (acc[targetName] || 0) + 1;
-    return acc;
-  }, {});
+  const incomingRed = countByColor(incomingMoves, "red");
+  const incomingBlack = countByColor(incomingMoves, "black");
+  const incomingYellow = countByColor(incomingMoves, "yellow");
 
-  const incomingCounts = movesAgainstMe.reduce<Record<string, number>>((acc, tile) => {
-    const sourceName = tile.playedBy || tile.playedById || "უცნობი მოთამაშე";
-    acc[sourceName] = (acc[sourceName] || 0) + 1;
-    return acc;
-  }, {});
-
-  const mostTargetedPlayer =
-    Object.entries(targetCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "არ გამოიკვეთა";
-
-  const mostActiveAgainstMe =
-    Object.entries(incomingCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "არ გამოიკვეთა";
+  const leaderMoves = myMoves.filter((tile) => tile.symbol === "L").length;
+  const neutralMoves = myMoves.filter((tile) => tile.symbol === "0").length;
+  const cycleMoves = myMoves.filter((tile) => tile.symbol === "↻").length;
+  const unlimitedMoves = myMoves.filter((tile) => tile.symbol === "∞").length;
+  const resourceMoves = myMoves.filter(
+    (tile) => tile.color === "yellow" || /^[0-9]+$/.test(tile.symbol || "")
+  ).length;
 
   const totalMyMoves = myMoves.length;
-  const totalIncoming = movesAgainstMe.length;
+  const totalIncoming = incomingMoves.length;
+  const totalGameMoves = playedTiles.length || 1;
+  const influenceShare = Math.round((totalMyMoves / totalGameMoves) * 100);
 
-  const style =
+  const outgoingByTarget = myMoves.reduce<Record<string, PlayedTile[]>>((acc, tile) => {
+    const target = tile.targetName || tile.targetId || "უცნობი მოთამაშე";
+    acc[target] = acc[target] || [];
+    acc[target].push(tile);
+    return acc;
+  }, {});
+
+  const incomingBySource = incomingMoves.reduce<Record<string, PlayedTile[]>>((acc, tile) => {
+    const source = tile.playedBy || tile.playedById || "უცნობი მოთამაშე";
+    acc[source] = acc[source] || [];
+    acc[source].push(tile);
+    return acc;
+  }, {});
+
+  const sortedTargets = Object.entries(outgoingByTarget).sort((a, b) => b[1].length - a[1].length);
+  const sortedSources = Object.entries(incomingBySource).sort((a, b) => b[1].length - a[1].length);
+
+  const mainTarget = sortedTargets[0]?.[0] || "არ გამოიკვეთა";
+  const mainSource = sortedSources[0]?.[0] || "არ გამოიკვეთა";
+
+  const firstMove = myMoves[0];
+  const lastMove = myMoves[myMoves.length - 1];
+
+  const describeMoves = (tiles: PlayedTile[], limit = 4) => {
+    if (tiles.length === 0) return "კონკრეტული სვლები არ დაფიქსირდა.";
+
+    return tiles
+      .slice(0, limit)
+      .map((tile) => {
+        const target = tile.targetName || tile.targetId || "უცნობი სამიზნე";
+        return `„${tile.name}“ → ${target}`;
+      })
+      .join("; ");
+  };
+
+  const describeIncoming = (tiles: PlayedTile[], limit = 4) => {
+    if (tiles.length === 0) return "მის მიმართ მნიშვნელოვანი სვლები არ დაფიქსირდა.";
+
+    return tiles
+      .slice(0, limit)
+      .map((tile) => {
+        const source = tile.playedBy || tile.playedById || "უცნობი მოთამაშე";
+        return `${source} → „${tile.name}“`;
+      })
+      .join("; ");
+  };
+
+  const gameRed = countByColor(playedTiles, "red");
+  const gameBlack = countByColor(playedTiles, "black");
+  const gameYellow = countByColor(playedTiles, "yellow");
+
+  const dominantGameClimate =
+    gameBlack > gameRed && gameBlack > gameYellow
+      ? "კონფლიქტური და დაძაბული"
+      : gameRed > gameBlack && gameRed > gameYellow
+        ? "კოალიციური და შეთანხმებაზე ორიენტირებული"
+        : gameYellow > gameRed && gameYellow > gameBlack
+          ? "რესურსული და პოზიციური"
+          : "შერეული და არასტაბილური";
+
+  const personalProfile =
     totalMyMoves === 0
-      ? "დაკვირვებითი / პასიური"
-      : blackMoves.length > redMoves.length && blackMoves.length >= yellowMoves.length
-        ? "კონფლიქტური და შეტევითი"
-        : redMoves.length > blackMoves.length && redMoves.length >= yellowMoves.length
-          ? "კოალიციური და დიპლომატიური"
-          : yellowMoves.length >= redMoves.length && yellowMoves.length >= blackMoves.length
-            ? "რესურსებზე ორიენტირებული"
-            : "შერეული სტრატეგია";
+      ? "პასიური დამკვირვებელი"
+      : myRed >= myBlack + 2 && myRed >= myYellow
+        ? "კოალიციის არქიტექტორი"
+        : myBlack >= myRed + 2 && myBlack >= myYellow
+          ? "ძალის პოლიტიკის მოთამაშე"
+          : myYellow >= myRed && myYellow >= myBlack && myYellow >= 2
+            ? "რესურსების მმართველი"
+            : leaderMoves >= 2
+              ? "ლიდერული ცენტრის მაძიებელი"
+              : neutralMoves >= 2
+                ? "ბალანსის დამჭერი"
+                : "შერეული სტრატეგი";
 
   const riskLevel =
-    blackMoves.length + movesAgainstMe.filter((tile) => tile.color === "black").length >= 4
+    myBlack + incomingBlack >= 5
       ? "მაღალი"
-      : blackMoves.length >= 2 || totalIncoming >= 4
+      : myBlack + incomingBlack >= 3
         ? "საშუალო"
         : "დაბალი";
 
-  const influence =
-    totalMyMoves >= 5
-      ? "მაღალი გავლენა"
+  const initiativeLevel =
+    totalMyMoves >= 6
+      ? "მაღალი ინიციატივა"
       : totalMyMoves >= 3
-        ? "საშუალო გავლენა"
+        ? "საშუალო ინიციატივა"
         : totalMyMoves >= 1
-          ? "შეზღუდული, მაგრამ შესამჩნევი გავლენა"
-          : "გავლენა თითქმის არ დაფიქსირდა";
+          ? "ფრთხილი ინიციატივა"
+          : "ინიციატივა თითქმის არ გამოჩნდა";
 
-  const resultComment =
-    hand.length === 0
-      ? "მოთამაშემ სრულად დაცალა თავისი კენჭები, რაც თამაშში აქტიურობისა და ტემპის კონტროლის ძლიერი მაჩვენებელია."
-      : `მოთამაშეს თამაშის ბოლოს დარჩა ${hand.length} კენჭი, რაც მიუთითებს, რომ სტრატეგიის ნაწილი ბოლომდე ვერ გარდაიქმნა მოქმედებად.`;
+  const relationPattern =
+    sortedTargets.length >= 3
+      ? "მოთამაშე რამდენიმე მიმართულებით მოქმედებდა და არ იყო მიბმული ერთ პოლიტიკურ ხაზზე."
+      : sortedTargets.length === 2
+        ? "მოთამაშეს ორი ძირითადი მიმართულება ჰქონდა, რაც აჩვენებს არჩევით და ფრთხილ სტრატეგიას."
+        : sortedTargets.length === 1
+          ? "მოთამაშე ძირითადად ერთ სამიზნეზე იყო კონცენტრირებული, რაც შეიძლება იყოს როგორც თანმიმდევრული სტრატეგია, ასევე ზედმეტი დამოკიდებულება ერთ კონფლიქტზე ან ალიანსზე."
+          : "მოთამაშის ურთიერთობათა ქსელი სუსტად გამოჩნდა.";
 
-  const allianceComment =
-    redMoves.length > blackMoves.length
-      ? "მოთამაშე უფრო ხშირად იყენებდა შეთანხმების, პარტნიორობისა და კავშირის ლოგიკას. ეს აჩვენებს, რომ მისთვის ძალაუფლება უფრო მეტად ურთიერთობების შექმნაზე გადიოდა."
-      : redMoves.length === 0
-        ? "მოთამაშის თამაშში კოალიციური ხაზები სუსტად ჩანდა. მომავალში მას შეუძლია მეტი ყურადღება დაუთმოს პარტნიორობის შექმნას."
-        : "კოალიციური სვლები იყო, თუმცა ისინი არ იყო მთავარი ღერძი. მოთამაშე უფრო მეტად რეაგირებდა სიტუაციაზე, ვიდრე აწყობდა გრძელვადიან ალიანსს.";
-
-  const conflictComment =
-    blackMoves.length > redMoves.length
-      ? "შავი სვლების სიჭარბე მიუთითებს, რომ მოთამაშე მზად იყო კონფლიქტისთვის, ზეწოლისთვის ან ძალაუფლების ხისტი გამოყენებისთვის."
-      : blackMoves.length === 0
-        ? "მოთამაშე თითქმის არ იყენებდა შეტევით ან დამაზიანებელ სვლებს. ეს ამცირებს რისკს, მაგრამ ზოგჯერ ამცირებს ზეწოლის შესაძლებლობასაც."
-        : "შეტევითი სვლები ზომიერად გამოჩნდა. მოთამაშე კონფლიქტს იყენებდა, მაგრამ არ აქცევდა მას მთავარ სტრატეგიად.";
-
-  const resourceComment =
-    resourceMoves.length >= 3
-      ? "რესურსული სვლები კარგად იყო გამოყენებული. მოთამაშე ცდილობდა ძალის დაგროვებას და არა მხოლოდ დაუყოვნებელ რეაქციას."
-      : "რესურსების დაგროვება შედარებით სუსტად ჩანდა. მომავალ თამაშში უკეთესი იქნება, თუ მოთამაშე მხოლოდ პასუხებზე კი არა, ძალის მომზადებაზეც იფიქრებს.";
-
-  const incomingComment =
+  const pressurePattern =
     totalIncoming === 0
-      ? "სხვა მოთამაშეები მასზე თითქმის არ მოქმედებდნენ, რაც შეიძლება ნიშნავდეს ან დაბალ საფრთხედ აღქმას, ან თამაშის პერიფერიაზე დარჩენას."
-      : blackIncoming.length > redIncoming.length
-        ? "მის მიმართ უფრო მეტად ხისტი ან შეტევითი სვლები გამოიყენეს. ეს ნიშნავს, რომ მოთამაშე აღიქმებოდა როგორც საფრთხე ან სამიზნე."
-        : redIncoming.length > blackIncoming.length
-          ? "მის მიმართ უფრო ხშირად კოალიციური/დიპლომატიური სვლები იყო. ეს აჩვენებს, რომ სხვა მოთამაშეები მასთან ურთიერთობის აწყობას ცდილობდნენ."
-          : "მის მიმართ სხვადასხვა ტიპის სვლები იყო, რაც მიუთითებს შერეულ აღქმაზე: ზოგისთვის პარტნიორი, ზოგისთვის კონკურენტი.";
+      ? "სხვა მოთამაშეები მას თითქმის არ ეხებოდნენ. ეს შეიძლება ნიშნავდეს, რომ ის ან არ აღიქმებოდა საფრთხედ, ან ძალიან ფრთხილად თამაშობდა."
+      : incomingBlack > incomingRed && incomingBlack >= incomingYellow
+        ? "მის წინააღმდეგ წამოვიდა მაღალი წნეხი და შეტევითი სვლები. ეს აჩვენებს, რომ იგი თამაშში აღიქმებოდა როგორც მნიშვნელოვანი სამიზნე."
+        : incomingRed > incomingBlack && incomingRed >= incomingYellow
+          ? "მის მიმართ უფრო ხშირად კოალიციური ან შეთანხმებითი სვლები მოდიოდა. სხვა მოთამაშეები მასთან კავშირის შექმნას ცდილობდნენ."
+          : "მის მიმართ რეაქციები შერეული იყო — ზოგისთვის პარტნიორი იყო, ზოგისთვის კონკურენტი.";
 
-  const recommendation =
-    style === "კონფლიქტური და შეტევითი"
-      ? "რეკომენდაცია: მომავალ თამაშში შეტევით სვლებს დაუმატეთ მინიმუმ ერთი ძლიერი ალიანსი, რადგან მხოლოდ ზეწოლა ხშირად ქმნის წინააღმდეგობის კოალიციას."
-      : style === "კოალიციური და დიპლომატიური"
-        ? "რეკომენდაცია: კარგი იქნება, თუ დიპლომატიას დაუმატებთ რესურსულ და ლიდერულ სვლებს, რათა ალიანსი მხოლოდ სიმპათიაზე კი არა, ძალაზეც იდგეს."
-        : style === "რესურსებზე ორიენტირებული"
-          ? "რეკომენდაცია: რესურსების დაგროვებასთან ერთად საჭიროა უფრო მკაფიო პოლიტიკური სამიზნე — ვისთან ერთიანდებით და ვის აბალანსებთ."
-          : "რეკომენდაცია: მომავალ თამაშში თავიდანვე აირჩიეთ ერთი მთავარი ხაზი — ალიანსი, რესურსი, ლიდერობა ან ზეწოლა — და შემდეგ სვლები ამ ხაზს დაუქვემდებარეთ.";
+  const finishResult =
+    hand.length === 0
+      ? "მოთამაშემ დაცალა ყველა კენჭი. ეს ნიშნავს, რომ მან შეძლო ტემპის დაჭერა და თავისი რესურსის ბოლომდე გარდაქმნა პოლიტიკურ მოქმედებად."
+      : `თამაშის დასრულებისას მოთამაშეს დარჩა ${hand.length} კენჭი. ეს მიუთითებს, რომ მისი პოტენციალის ნაწილი თამაშში ვერ შევიდა ან ვერ მოასწრო ბოლომდე რეალიზება.`;
 
-  return `ხელოვნური ინტელექტის ინდივიდუალური შეფასება — ${playerNameForAssessment}
+  const strategicStrengths: string[] = [];
 
-1. საერთო სურათი
-${playerNameForAssessment}-ის თამაში შეფასდა არა მთლიანი დაფის, არამედ მხოლოდ მისი პირადი სვლების მიხედვით. ამ მოთამაშემ განახორციელა ${totalMyMoves} სვლა. მის წინააღმდეგ განხორციელდა ${totalIncoming} სვლა. მისი სტრატეგიული პროფილია: ${style}. გავლენის დონე: ${influence}. რისკის დონე: ${riskLevel}.
+  if (myRed > 0) strategicStrengths.push("შეძლო კოალიციური სივრცის შექმნა და ურთიერთობების გამოყენება.");
+  if (myBlack > 0) strategicStrengths.push("არ ერიდებოდა ხისტ მოქმედებებს და საჭიროებისას იყენებდა ზეწოლას.");
+  if (myYellow > 0 || resourceMoves > 0) strategicStrengths.push("ჰქონდა რესურსებზე ფიქრისა და ძალის დაგროვების ელემენტი.");
+  if (leaderMoves > 0) strategicStrengths.push("აჩვენა ლიდერობისკენ სწრაფვა და ცენტრის დაკავების სურვილი.");
+  if (totalIncoming >= 3) strategicStrengths.push("თამაშში საკმარისად შესამჩნევი იყო, რადგან სხვა მოთამაშეები მასზე რეაგირებდნენ.");
+  if (strategicStrengths.length === 0) strategicStrengths.push("მისი მთავარი ძლიერი მხარე იყო სიფრთხილე და ზედმეტი რისკისგან თავის არიდება.");
 
-2. მოთამაშის სვლების სტრუქტურა
-წითელი / კოალიციური სვლები: ${redMoves.length}
-შავი / კონფლიქტური სვლები: ${blackMoves.length}
-ყვითელი / რესურსული სვლები: ${yellowMoves.length}
-ლიდერის სვლები: ${leaderMoves.length}
-ნეიტრალური სვლები: ${neutralMoves.length}
+  const weaknesses: string[] = [];
 
-3. სტრატეგიული ქცევა
-${allianceComment}
+  if (myRed === 0) weaknesses.push("კოალიციური ხაზი სუსტად იყო განვითარებული.");
+  if (myYellow === 0) weaknesses.push("რესურსების დაგროვება და მომზადება თითქმის არ ჩანდა.");
+  if (myBlack > myRed + myYellow) weaknesses.push("ზედმეტი კონფლიქტურობა შეიძლება აჩენდეს წინააღმდეგობის კოალიციას.");
+  if (totalMyMoves <= 2) weaknesses.push("სვლების რაოდენობა მცირე იყო და გავლენა შეზღუდულად გამოჩნდა.");
+  if (sortedTargets.length <= 1 && totalMyMoves >= 3) weaknesses.push("მოქმედებები ზედმეტად კონცენტრირებული იყო ერთ მიმართულებაზე.");
+  if (weaknesses.length === 0) weaknesses.push("სერიოზული სისუსტე მკვეთრად არ გამოჩნდა, თუმცა სტრატეგიის უფრო მკაფიო ხაზად ჩამოყალიბება მაინც საჭიროა.");
 
-${conflictComment}
+  const recommendations: string[] = [];
 
-${resourceComment}
+  if (personalProfile === "კოალიციის არქიტექტორი") {
+    recommendations.push("შემდეგ თამაშში ალიანსებს დაუმატეთ რესურსული სვლები, რათა პარტნიორობა მხოლოდ ნდობაზე კი არა, ძალაზეც იდგეს.");
+    recommendations.push("მოერიდეთ ზედმეტად რბილ თამაშს — ზოგჯერ საჭიროა მკაფიო საზღვრის გავლება.");
+  } else if (personalProfile === "ძალის პოლიტიკის მოთამაშე") {
+    recommendations.push("შეტევით სვლებს დაუმატეთ მინიმუმ ერთი სტაბილური პარტნიორი, რადგან ძალა იზოლაციაში სწრაფად იწვევს წინააღმდეგობას.");
+    recommendations.push("შავი სვლების შემდეგ გამოიყენეთ წითელი სვლა, რომ კონფლიქტი სრულ ბლოკად არ გადაიქცეს.");
+  } else if (personalProfile === "რესურსების მმართველი") {
+    recommendations.push("რესურსების დაგროვებასთან ერთად უფრო მკაფიოდ აირჩიეთ პოლიტიკური სამიზნე.");
+    recommendations.push("როცა რესურსი დაგროვებულია, გამოიყენეთ ის ლიდერობის ან ალიანსის შესაქმნელად.");
+  } else if (personalProfile === "ლიდერული ცენტრის მაძიებელი") {
+    recommendations.push("ლიდერობა გაამყარეთ კონკრეტული პარტნიორობით, თორემ ლიდერის პოზიცია შეიძლება სწრაფად გახდეს სამიზნე.");
+    recommendations.push("ლიდერის სვლებს დაუმატეთ ნეიტრალური ან რესურსული სვლები, რომ ნაკლებად აგრესიულად გამოჩნდეს.");
+  } else {
+    recommendations.push("შემდეგ თამაშში თავიდანვე აირჩიეთ ერთი მთავარი სტრატეგიული ხაზი: ალიანსი, რესურსი, ლიდერობა ან ზეწოლა.");
+    recommendations.push("ეცადეთ პირველი სამი სვლა ერთმანეთთან ლოგიკურად იყოს დაკავშირებული და არა მხოლოდ სიტუაციური პასუხი.");
+  }
 
-4. როგორ აღიქვამდნენ სხვა მოთამაშეები
-${incomingComment}
+  recommendations.push("დააკვირდით, ვისგან მოდის ყველაზე მეტი ზეწოლა და დროულად შექმენით საპასუხო კოალიცია.");
+  recommendations.push("არ დახარჯოთ ყველა ძლიერი კენჭი ერთ მოთამაშეზე — გავლენა უკეთ ნაწილდება რამდენიმე მიმართულებით.");
 
-ყველაზე ხშირად ამ მოთამაშის სამიზნე იყო: ${mostTargetedPlayer}.
-ყველაზე აქტიურად მის წინააღმდეგ ან მის მიმართ მოქმედებდა: ${mostActiveAgainstMe}.
+  const historicalParallel =
+    personalProfile === "კოალიციის არქიტექტორი"
+      ? "ამ სტილს შეიძლება შევადაროთ პოლიტიკური მოლაპარაკებების ლიდერები, რომლებიც ძალაუფლებას აშენებენ ურთიერთობების ქსელით და არა მხოლოდ ზეწოლით."
+      : personalProfile === "ძალის პოლიტიკის მოთამაშე"
+        ? "ეს სტილი ჰგავს რეალიზმის სკოლას პოლიტიკაში, სადაც უსაფრთხოება, ზეწოლა და ძალის დემონსტრირება ცენტრალურ როლს თამაშობს."
+        : personalProfile === "რესურსების მმართველი"
+          ? "ეს სტილი ახლოსაა ეკონომიკური ძალაუფლების პოლიტიკასთან, სადაც მოთამაშე პირდაპირ შეტევაზე მეტად რესურსების დაგროვებით ქმნის უპირატესობას."
+          : personalProfile === "ლიდერული ცენტრის მაძიებელი"
+            ? "ეს სტილი ჰგავს ცენტრალური ლიდერის მოდელს, სადაც მოთამაშე ცდილობს გახდეს პროცესის ღერძი და არა მხოლოდ ერთ-ერთი მონაწილე."
+            : "ეს სტილი უფრო ჰგავს მოქნილ პოლიტიკურ ტაქტიკოსს, რომელიც ცდილობს გარემოსთან ადაპტაციას, თუმცა ზოგჯერ აკლია მკაფიო გრძელვადიანი ხაზი.";
 
-5. შედეგი
-${resultComment}
+  return `ხელოვნური ინტელექტის ინდივიდუალური პოლიტიკური შეფასება — ${playerNameForAssessment}
 
-6. პოლიტიკური ინტერპრეტაცია
-${playerNameForAssessment}-ის თამაში აჩვენებს, როგორ იყენებდა ის ძალაუფლებას: ალიანსით, კონფლიქტით, რესურსით თუ პოზიციური მოთმინებით. ძლიერი მხარე იყო ის, რომ მოთამაშემ შეძლო საკუთარი როლის დაფიქსირება საერთო პროცესში. სუსტი მხარე შეიძლება იყოს ის, რომ ზოგიერთი სვლა უფრო რეაქტიული იყო და არა წინასწარ დაგეგმილი.
+I. მოთამაშის საერთო პოლიტიკური პროფილი
 
-7. რეკომენდაცია
-${recommendation}`;
+${playerNameForAssessment}-ის თამაში შეფასებულია მხოლოდ მისი პირადი სვლების, მის მიმართ განხორციელებული მოქმედებების და თამაშში მისი როლის მიხედვით. ეს არ არის საერთო დაფის ზოგადი შეფასება.
+
+მოთამაშის პროფილი: ${personalProfile}
+ინიციატივის დონე: ${initiativeLevel}
+გავლენის წილი მთლიან თამაშში: დაახლოებით ${influenceShare}%
+რისკის დონე: ${riskLevel}
+თამაშის საერთო კლიმატი: ${dominantGameClimate}
+
+${finishResult}
+
+II. სვლების ანატომია
+
+${playerNameForAssessment}-მა განახორციელა ${totalMyMoves} სვლა.
+
+მისი სვლების განაწილება:
+წითელი / ალიანსი, შეთანხმება, კოალიცია: ${myRed}
+შავი / კონფლიქტი, ზეწოლა, მანიპულაცია: ${myBlack}
+ყვითელი / რესურსი, რაოდენობრივი ძალა, მომზადება: ${myYellow}
+ლიდერის სიმბოლო L: ${leaderMoves}
+ნეიტრალური სვლები 0: ${neutralMoves}
+ციკლური სვლები ↻: ${cycleMoves}
+უსასრულო/გახანგრძლივებული გავლენა ∞: ${unlimitedMoves}
+
+პირველი სვლა: ${
+    firstMove
+      ? `„${firstMove.name}“ მოთამაშის მიმართ: ${firstMove.targetName || firstMove.targetId}`
+      : "არ დაფიქსირდა"
+  }
+
+ბოლო სვლა: ${
+    lastMove
+      ? `„${lastMove.name}“ მოთამაშის მიმართ: ${lastMove.targetName || lastMove.targetId}`
+      : "არ დაფიქსირდა"
+  }
+
+III. ურთიერთობების ქსელი
+
+მთავარი სამიზნე ან პარტნიორი: ${mainTarget}
+
+${relationPattern}
+
+მისი მნიშვნელოვანი სვლები:
+${describeMoves(myMoves)}
+
+ამ მონაცემებიდან ჩანს, რომ ${playerNameForAssessment}-ის პოლიტიკური ენერგია ძირითადად მიმართული იყო ${
+    mainTarget === "არ გამოიკვეთა"
+      ? "ზოგადი პოზიციონირებისკენ და არა კონკრეტული მოთამაშის მიმართ."
+      : `${mainTarget}-ის მიმართ.`
+  }
+
+IV. როგორ რეაგირებდნენ სხვები მასზე
+
+მის მიმართ განხორციელდა ${totalIncoming} სვლა.
+
+მის მიმართ სვლების განაწილება:
+წითელი: ${incomingRed}
+შავი: ${incomingBlack}
+ყვითელი: ${incomingYellow}
+
+ყველაზე აქტიური მოთამაშე მის მიმართ: ${mainSource}
+
+მის მიმართ მნიშვნელოვანი მოქმედებები:
+${describeIncoming(incomingMoves)}
+
+${pressurePattern}
+
+V. სტრატეგიული ინტერპრეტაცია
+
+${playerNameForAssessment}-ის თამაში აჩვენებს, რომ მისი პოლიტიკური ქცევა არ იყო მხოლოდ კენჭების დადება. ეს იყო ძალაუფლების, რისკის, ურთიერთობებისა და რესურსების მართვის მცდელობა.
+
+თუ მოთამაშე ხშირად იყენებდა წითელ სვლებს, მისი ძალა მოდიოდა ურთიერთობებიდან. თუ შავი სვლები ჭარბობდა, ის ცდილობდა გავლენის მოპოვებას ზეწოლით. თუ ყვითელი სვლები იყო მნიშვნელოვანი, მოთამაშე ფიქრობდა რესურსებზე და მომავალი პოზიციის მომზადებაზე.
+
+ამ კონკრეტულ თამაშში მისი ძირითადი ხაზი იყო: ${personalProfile}.
+
+VI. ძლიერი მხარეები
+
+${strategicStrengths.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+
+VII. სუსტი მხარეები და რისკები
+
+${weaknesses.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+
+VIII. პოლიტიკური პარალელი
+
+${historicalParallel}
+
+IX. რეკომენდაციები შემდეგი თამაშისთვის
+
+${recommendations.map((item, index) => `${index + 1}. ${item}`).join("\n")}
+
+X. მოკლე დასკვნა
+
+${playerNameForAssessment}-ის თამაში შეიძლება შეფასდეს როგორც „${personalProfile}“-ის მაგალითი. მისი წარმატება ან წარუმატებლობა განისაზღვრა არა მხოლოდ იმით, რამდენი კენჭი დადო, არამედ იმითაც, როგორ აირჩია სამიზნეები, როგორ უპასუხა ზეწოლას და რამდენად შეძლო საკუთარი პოლიტიკური ხაზის შენარჩუნება.
+
+საუკეთესო შემდეგი ნაბიჯი იქნება უფრო მკაფიო სტრატეგიული გეგმა: ვისთან ქმნის ალიანსს, ვის აბალანსებს, სად აგროვებს რესურსს და რომელ მომენტში გადადის ლიდერობისკენ.`;
 }
 export default function RoomPage() {
   const params = useParams();

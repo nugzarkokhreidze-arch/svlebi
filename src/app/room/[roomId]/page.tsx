@@ -1528,6 +1528,11 @@ const [turnCounter, setTurnCounter] = useState(0);
     localSeatId,
   ]);
 
+  function openAssessmentModal() {
+    setShowVictoryModal(false);
+    setShowAssessmentModal(true);
+  }
+
   const boardScale =
     board.length > 30 ? 0.5 : board.length > 22 ? 0.58 : board.length > 14 ? 0.7 : 0.84;
 
@@ -2839,7 +2844,7 @@ function continueAiGameAsObserver() {
                 <button
                   className="awardPrimaryButton"
                   onClick={() => {
-                    setShowAssessmentModal(true);
+                    openAssessmentModal();
                   }}
                   type="button"
                 >

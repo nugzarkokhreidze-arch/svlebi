@@ -117,6 +117,7 @@ export default function HomePage() {
           <a href="#goal">მიზანი</a>
           <a href="#rules">წესები</a>
           <a href="#learn">რას ასწავლის</a>
+                  <a className="authorTopLink" href="#author">ავტორი</a>
         </nav>
 
         <Link className="homeStartButton" href="/setup">
@@ -229,7 +230,7 @@ export default function HomePage() {
       </section>
     
       {/* Author Section */}
-      <section className="authorSection">
+      <section id="author" className="authorSection">
         <div className="authorCard">
           <p className="authorKicker">ავტორი</p>
           <h2>თამაშის ავტორი: ნუგზარ კოხრეიძე</h2>

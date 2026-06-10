@@ -6744,3 +6744,41 @@ html {
     border-radius: 20px;
   }
 }
+
+
+html {
+  scroll-behavior: smooth;
+}
+
+.authorSection {
+  scroll-margin-top: 90px;
+}
+
+.authorTopLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(127, 30, 30, 0.18);
+  background: rgba(255, 248, 231, 0.82);
+  color: #6b2418;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 12px 24px rgba(72, 38, 18, 0.10);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+.authorTopLink:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 16px 30px rgba(72, 38, 18, 0.16);
+}
+
+.homeTopAuthorShortcut {
+  width: min(1120px, calc(100% - 32px));
+  margin: 18px auto 0;
+  display: flex;
+  justify-content: center;
+}

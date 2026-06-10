@@ -6782,3 +6782,608 @@ html {
   display: flex;
   justify-content: center;
 }
+
+
+/* ===== SVLEBI RESPONSIVE LAYOUT FIX: HOME + GAME ===== */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* General media safety */
+img,
+svg,
+video,
+canvas {
+  max-width: 100%;
+}
+
+/* iPad / tablet */
+@media (max-width: 1180px) {
+  .gameTopbar {
+    width: min(100% - 24px, 1100px);
+    margin: 12px auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    border-radius: 22px;
+  }
+
+  .gameLogo {
+    flex: 1 1 180px;
+    justify-content: center;
+  }
+
+  .gameTopInfo {
+    order: 3;
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.88rem;
+  }
+
+  .soundToggle,
+  .gameTopButton {
+    flex: 0 0 auto;
+    min-height: 40px;
+  }
+
+  .gameShell,
+  .v8GameShell {
+    width: min(100% - 22px, 1120px);
+    margin: 10px auto 24px;
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .centerGameArea,
+  .v8CenterArea,
+  .rightGamePanel,
+  .v8RightPanel {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .playersTopStrip {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 8px 4px 12px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .topPlayerWrap {
+    flex: 0 0 116px;
+    scroll-snap-align: start;
+  }
+
+  .topPlayerCard {
+    min-height: 128px;
+    padding: 10px 8px;
+  }
+
+  .topPlayerCard strong {
+    font-size: 0.82rem;
+    line-height: 1.15;
+    text-align: center;
+    word-break: break-word;
+  }
+
+  .topPlayerCard span {
+    font-size: 0.76rem;
+  }
+
+  .topPlayerAvatar,
+  .naturalAvatar {
+    width: 46px;
+    height: 46px;
+    font-size: 1.45rem;
+  }
+
+  .tableArea,
+  .verticalTableArea,
+  .v8TableArea {
+    width: 100%;
+    min-width: 0;
+    display: grid !important;
+    grid-template-columns: 160px minmax(0, 1fr) !important;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .boardMarketStack {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .boardMarketBox,
+  .moveSpotlightCard {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .verticalDominoCanvas,
+  .v8DominoCanvas {
+    width: 100%;
+    min-width: 0;
+    height: clamp(520px, 68vh, 760px);
+    overflow: hidden;
+    border-radius: 24px;
+  }
+
+  .moveControls,
+  .v8MoveControls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .sideSelector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sideSelector button {
+    flex: 1 1 76px;
+    min-height: 38px;
+  }
+
+  .bottomPlayZone,
+  .v8BottomPlayZone {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .bottomHandDock,
+  .compactHandDock,
+  .bottomHelperPanel,
+  .navigatorPanel {
+    min-width: 0;
+  }
+
+  .bottomVerticalHandTiles,
+  .compactBottomTiles {
+    display: flex !important;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 10px;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .bottomVerticalHandTiles .roomTile,
+  .compactBottomTiles .roomTile {
+    flex: 0 0 92px;
+  }
+
+  .rightGamePanel,
+  .v8RightPanel {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .panelCard,
+  .logCard,
+  .v8LogCard,
+  .chatPanelAlways,
+  .v8ChatPanel {
+    min-width: 0;
+  }
+
+  .moveLogList,
+  .chronologicalLog,
+  .v8MoveLog,
+  .chatMessages,
+  .alwaysVisibleChatMessages {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .modalContent,
+  .v8ModalContent,
+  .awardModalCard {
+    width: min(94vw, 760px);
+    max-height: 86vh;
+    overflow-y: auto;
+  }
+
+  .authorSection,
+  .homeTopAuthorShortcut {
+    width: min(100% - 24px, 1120px);
+  }
+
+  .authorCard {
+    padding: 24px;
+  }
+}
+
+/* Phones + small tablets */
+@media (max-width: 760px) {
+  .gameTopbar {
+    width: calc(100% - 16px);
+    margin: 8px auto;
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .gameLogo {
+    flex: 1 1 100%;
+    font-size: 1.05rem;
+  }
+
+  .gameTopInfo {
+    font-size: 0.78rem;
+    gap: 6px;
+  }
+
+  .gameTopInfo span {
+    padding: 6px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.55);
+  }
+
+  .soundToggle,
+  .gameTopButton {
+    flex: 1 1 calc(50% - 8px);
+    justify-content: center;
+    padding: 9px 10px;
+    font-size: 0.86rem;
+  }
+
+  .gameShell,
+  .v8GameShell {
+    width: calc(100% - 14px);
+    gap: 10px;
+  }
+
+  .playersTopStrip {
+    gap: 8px;
+    padding: 6px 2px 10px;
+  }
+
+  .topPlayerWrap {
+    flex-basis: 96px;
+  }
+
+  .topPlayerCard {
+    min-height: 112px;
+    border-radius: 18px;
+    padding: 8px 6px;
+  }
+
+  .topPlayerAvatar,
+  .naturalAvatar {
+    width: 38px;
+    height: 38px;
+    font-size: 1.2rem;
+  }
+
+  .tableArea,
+  .verticalTableArea,
+  .v8TableArea {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .boardMarketStack {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .boardMarketBox,
+  .moveSpotlightCard {
+    min-height: 116px;
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .moveSpotlightAvatar {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+  }
+
+  .moveSpotlightName,
+  .moveSpotlightAction,
+  .moveSpotlightBubble {
+    font-size: 0.78rem;
+  }
+
+  .verticalDominoCanvas,
+  .v8DominoCanvas {
+    height: 62vh;
+    min-height: 470px;
+    border-radius: 20px;
+    touch-action: none;
+  }
+
+  .boardDominoNode {
+    transform: translate(-50%, -50%) scale(0.84);
+    transform-origin: center;
+  }
+
+  .boardDominoNode .roomTile {
+    min-width: 72px;
+    max-width: 80px;
+  }
+
+  .boardDominoNode .roomTile b {
+    font-size: 1.05rem;
+  }
+
+  .boardDominoNode .roomTile span {
+    font-size: 0.62rem;
+    line-height: 1.05;
+  }
+
+  .moveControls,
+  .v8MoveControls {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .moveControls label,
+  .v8MoveControls label {
+    font-size: 0.82rem;
+  }
+
+  .sideSelector button {
+    flex: 1 1 calc(50% - 8px);
+    min-height: 36px;
+    font-size: 0.82rem;
+  }
+
+  .bottomPlayZone,
+  .v8BottomPlayZone {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .bottomHandDock,
+  .compactHandDock,
+  .bottomHelperPanel,
+  .navigatorPanel {
+    border-radius: 18px;
+    padding: 12px;
+  }
+
+  .bottomHandHeader strong,
+  .navigatorPanel h3 {
+    font-size: 0.92rem;
+  }
+
+  .navigatorPanel p {
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .bottomVerticalHandTiles .roomTile,
+  .compactBottomTiles .roomTile {
+    flex-basis: 82px;
+    min-width: 82px;
+    min-height: 112px;
+  }
+
+  .bottomVerticalHandTiles .roomTile b,
+  .compactBottomTiles .roomTile b {
+    font-size: 1.1rem;
+  }
+
+  .bottomVerticalHandTiles .roomTile span,
+  .compactBottomTiles .roomTile span {
+    font-size: 0.66rem;
+    line-height: 1.08;
+  }
+
+  .rightGamePanel,
+  .v8RightPanel {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .moveLogList,
+  .chronologicalLog,
+  .v8MoveLog,
+  .chatMessages,
+  .alwaysVisibleChatMessages {
+    max-height: 220px;
+  }
+
+  .realChatInput {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    gap: 8px;
+  }
+
+  .realChatInput input {
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .awardModalOverlay,
+  .modalOverlay,
+  .v8ModalOverlay {
+    padding: 12px;
+    align-items: center;
+  }
+
+  .awardModalCard,
+  .modalContent,
+  .v8ModalContent,
+  .v8AssessmentModal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 88vh;
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .awardModalCard h2,
+  .v8ModalTitle {
+    font-size: 1.35rem;
+    line-height: 1.15;
+  }
+
+  .awardActions,
+  .v8ModalButtons {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .awardPrimaryButton,
+  .awardSecondaryButton,
+  .awardGhostButton,
+  .v8ModalButton {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .v8AssessmentText {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.82rem;
+    line-height: 1.48;
+  }
+
+  /* Homepage broad mobile safety */
+  main {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .authorSection,
+  .homeTopAuthorShortcut {
+    width: calc(100% - 18px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .authorCard {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .authorCard h2 {
+    font-size: 1.45rem;
+  }
+
+  .authorCard p {
+    font-size: 0.92rem;
+    line-height: 1.58;
+  }
+
+  .authorInfoBlock,
+  .authorSupportBox {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .authorTopLink {
+    width: 100%;
+    min-height: 42px;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 420px) {
+  .gameTopInfo span {
+    font-size: 0.72rem;
+  }
+
+  .topPlayerWrap {
+    flex-basis: 88px;
+  }
+
+  .topPlayerCard {
+    min-height: 104px;
+  }
+
+  .verticalDominoCanvas,
+  .v8DominoCanvas {
+    height: 60vh;
+    min-height: 430px;
+  }
+
+  .boardDominoNode {
+    transform: translate(-50%, -50%) scale(0.74);
+  }
+
+  .boardMarketStack {
+    grid-template-columns: 1fr;
+  }
+
+  .bottomVerticalHandTiles .roomTile,
+  .compactBottomTiles .roomTile {
+    flex-basis: 76px;
+    min-width: 76px;
+    min-height: 104px;
+  }
+
+  .panelCard,
+  .logCard,
+  .v8LogCard,
+  .chatPanelAlways,
+  .v8ChatPanel {
+    padding: 12px;
+    border-radius: 18px;
+  }
+}
+
+/* Landscape phones: keep board usable */
+@media (max-width: 920px) and (orientation: landscape) {
+  .verticalDominoCanvas,
+  .v8DominoCanvas {
+    height: 86vh;
+    min-height: 420px;
+  }
+
+  .playersTopStrip {
+    padding-bottom: 6px;
+  }
+
+  .topPlayerCard {
+    min-height: 92px;
+  }
+
+  .topPlayerAvatar,
+  .naturalAvatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .moveLogList,
+  .chronologicalLog,
+  .v8MoveLog,
+  .chatMessages,
+  .alwaysVisibleChatMessages {
+    max-height: 180px;
+  }
+}
+
